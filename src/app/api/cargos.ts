@@ -45,4 +45,9 @@ export const cargosApi = {
     api.put<{ mensaje: string; id: number }>(`/cargos/${id}`, data),
   eliminar: (id: number) =>
     api.delete<{ mensaje: string; id: number }>(`/cargos/${id}`),
+  generarAlicuotas: (data: { mes: number; anio: number; fechaVencimiento?: string | null }) =>
+    api.post<{ mensaje: string; total: number; cargosCreados: number }>(
+      `/cargos/generar-alicuotas`,
+      data
+    ),
 };

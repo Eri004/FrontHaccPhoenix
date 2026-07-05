@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  LayoutDashboard, Building2, Users, CreditCard, Receipt, Wallet,
+  LayoutDashboard, Building2, CreditCard, Receipt, Wallet,
   Settings, LogOut, Plus, Edit2, Trash2, Search, Download,
   TrendingUp, TrendingDown, DollarSign, Banknote, FileText,
   BarChart3, Home, UserCog, IdCard, Menu, X, RefreshCw, CheckCircle2,
-  AlertTriangle, Clock, ChevronRight, Mail, Phone, MapPin,
+  AlertTriangle, Clock, Mail, Phone, MapPin, Filter, Calendar,
+  ChevronRight, ArrowLeft, Layers, Hash, Square,
+  Hash as HashIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -12,30 +14,29 @@ import {
 } from "recharts";
 import { useAuth } from "./AuthContext";
 import {
-  edificiosApi, departamentosApi, propietariosApi, inquilinosApi,
-  cargosApi, pagosApi, gastosApi, tiposCargosApi, tiposGastosApi,
-  reportesApi,
+  edificiosApi, departamentosApi, propietariosApi,
+  cargosApi, pagosApi, gastosApi, tiposCargosApi,
   type Edificio, type Departamento, type Propietario, type Inquilino,
-  type Cargo, type Pago, type Gasto, type TipoCargo, type TipoGasto,
-  type EstadoCargo,
+  type Cargo, type Pago, type Gasto, type EstadoCargo, type TipoCargo,
+  COMPROBANTE_PENDIENTE, comprobanteEsPendiente,
+  inquilinosApi,
 } from "../api";
-import { ApiError } from "../api/client";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { NotificationBell } from "../components/NotificationBell";
+import PeriodFilter, { type PeriodValue, filterByPeriod, periodLabel } from "../components/PeriodFilter";
+import EdificioImage from "../components/EdificioImage";
 
 type Section =
   | "dashboard"
   | "edificios"
   | "departamentos"
   | "propietarios"
-  | "inquilinos"
   | "cargos"
   | "pagos"
   | "gastos"
-  | "tipos-cargos"
-  | "tipos-gastos"
   | "reportes"
   | "settings";
 
@@ -46,12 +47,9 @@ const NAV: { id: Section; label: string; icon: any; group: string }[] = [
   { id: "edificios", label: "Edificios", icon: Building2, group: "Estructura" },
   { id: "departamentos", label: "Departamentos", icon: Home, group: "Estructura" },
   { id: "propietarios", label: "Propietarios", icon: UserCog, group: "Personas" },
-  { id: "inquilinos", label: "Inquilinos", icon: Users, group: "Personas" },
   { id: "cargos", label: "Cargos", icon: Receipt, group: "Finanzas" },
   { id: "pagos", label: "Pagos", icon: Banknote, group: "Finanzas" },
   { id: "gastos", label: "Gastos", icon: Wallet, group: "Finanzas" },
-  { id: "tipos-cargos", label: "Tipos de Cargo", icon: FileText, group: "Catalogos" },
-  { id: "tipos-gastos", label: "Tipos de Gasto", icon: FileText, group: "Catalogos" },
   { id: "reportes", label: "Reportes", icon: BarChart3, group: "Otros" },
   { id: "settings", label: "Ajustes", icon: Settings, group: "Otros" },
 ];
@@ -74,7 +72,7 @@ function Toast({ message, type, onClose }: { message: string; type: "ok" | "err"
     return () => clearTimeout(t);
   }, [onClose]);
   return (
-    <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm ${
+    <div className={`fixed top-4 right-4 z-[60] px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm ${
       type === "ok" ? "bg-green-600 text-white" : "bg-red-600 text-white"
     }`}>
       {type === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
@@ -84,20 +82,21 @@ function Toast({ message, type, onClose }: { message: string; type: "ok" | "err"
 }
 
 function Modal({
-  open, onClose, title, children, footer,
-}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
+  open, onClose, title, children, footer, size = "md",
+}: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode; size?: "md" | "lg" | "xl" }) {
   if (!open) return null;
+  const sizes = { md: "max-w-2xl", lg: "max-w-3xl", xl: "max-w-5xl" };
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-40 p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
-        <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className={`bg-white dark:bg-slate-900 rounded-2xl shadow-2xl ${sizes[size]} w-full max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700`}>
+        <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-5">{children}</div>
-        {footer && <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex gap-3 justify-end">{footer}</div>}
+        {footer && <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex gap-3 justify-end bg-slate-50 dark:bg-slate-900/50 rounded-b-2xl">{footer}</div>}
       </div>
     </div>
   );
@@ -121,12 +120,24 @@ function ConfirmDialog({ open, message, onConfirm, onCancel }: {
 
 function StatusBadge({ estado }: { estado: EstadoCargo }) {
   const colors: Record<EstadoCargo, string> = {
-    PENDIENTE: "bg-amber-100 text-amber-700",
-    PARCIAL: "bg-blue-100 text-blue-700",
-    PAGADO: "bg-green-100 text-green-700",
-    ANULADO: "bg-red-100 text-red-700",
+    PENDIENTE: "bg-amber-100 text-amber-700 border-amber-200",
+    PARCIAL: "bg-blue-100 text-blue-700 border-blue-200",
+    PAGADO: "bg-green-100 text-green-700 border-green-200",
+    ANULADO: "bg-red-100 text-red-700 border-red-200",
   };
-  return <Badge className={colors[estado]}>{estado}</Badge>;
+  return <Badge className={`${colors[estado]} border`}>{estado}</Badge>;
+}
+
+function EmptyState({ title, description, icon: Icon }: { title: string; description: string; icon: any }) {
+  return (
+    <div className="p-8 text-center">
+      <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3">
+        <Icon className="w-8 h-8 text-slate-400" />
+      </div>
+      <p className="text-slate-700 dark:text-slate-200 font-medium">{title}</p>
+      <p className="text-sm text-slate-500 mt-1">{description}</p>
+    </div>
+  );
 }
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
@@ -138,25 +149,25 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const showToast = (message: string, type: "ok" | "err") => setToast({ message, type });
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
+    <div className="h-screen w-screen bg-slate-100 dark:bg-slate-950 flex overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <aside className={`${sidebarOpen ? "w-64" : "w-20"} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col`}>
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <aside className={`${sidebarOpen ? "w-64" : "w-20"} shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col h-full`}>
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           {sidebarOpen && (
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-slate-900 dark:text-white">HACCPHOENIX</span>
+              <span className="font-bold text-slate-900 dark:text-white truncate">HACCPHOENIX</span>
             </div>
           )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0">
             {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto min-h-0">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = section === item.id;
@@ -178,7 +189,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           })}
         </nav>
 
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800">
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 shrink-0">
           {sidebarOpen && (
             <div className="px-3 py-2 mb-2 text-xs">
               <p className="font-semibold text-slate-900 dark:text-white truncate">{user?.nombre} {user?.apellido}</p>
@@ -195,27 +206,32 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            {NAV.find((n) => n.id === section)?.label}
-          </h1>
-          <div className="text-sm text-slate-500 dark:text-slate-400">
-            {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              {NAV.find((n) => n.id === section)?.label}
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
+              Panel de administracion del condominio
+            </p>
+          </div>
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
+            <NotificationBell onNavigate={(s) => setSection(s as Section)} />
+            <div className="hidden md:block text-sm text-slate-500 dark:text-slate-400">
+              {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </div>
           </div>
         </header>
 
-        <div className="p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-slate-950">
           {section === "dashboard" && <DashboardSection />}
           {section === "edificios" && <EdificiosSection onToast={showToast} />}
           {section === "departamentos" && <DepartamentosSection onToast={showToast} />}
           {section === "propietarios" && <PropietariosSection onToast={showToast} />}
-          {section === "inquilinos" && <InquilinosSection onToast={showToast} />}
           {section === "cargos" && <CargosSection onToast={showToast} />}
           {section === "pagos" && <PagosSection onToast={showToast} />}
           {section === "gastos" && <GastosSection onToast={showToast} />}
-          {section === "tipos-cargos" && <TiposCargosSection onToast={showToast} />}
-          {section === "tipos-gastos" && <TiposGastosSection onToast={showToast} />}
           {section === "reportes" && <ReportesSection onToast={showToast} />}
           {section === "settings" && <SettingsSection user={user} />}
         </div>
@@ -243,6 +259,18 @@ function useFetch<T>(fetcher: () => Promise<T>) {
   }, [fetcher]);
   useEffect(() => { load(); }, [load]);
   return { data, loading, error, reload: load, setData };
+}
+
+function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <div>
+        <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
+        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
+      </div>
+      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
+    </div>
+  );
 }
 
 function TableCard({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
@@ -284,12 +312,12 @@ function DashboardSection() {
   const totalPendiente = cargosPendientes.reduce((s, c) => s + (c.valor || 0), 0);
 
   const stats = [
-    { label: "Edificios", value: edificios?.edificios?.length || 0, icon: Building2, color: "bg-blue-500" },
-    { label: "Propietarios", value: propietarios?.length || 0, icon: UserCog, color: "bg-purple-500" },
-    { label: "Departamentos", value: departamentos?.length || 0, icon: Home, color: "bg-cyan-500" },
-    { label: "Cargos", value: cargos?.length || 0, icon: Receipt, color: "bg-amber-500" },
-    { label: "Pagos", value: pagos?.length || 0, icon: Banknote, color: "bg-green-500" },
-    { label: "Gastos", value: gastos?.length || 0, icon: Wallet, color: "bg-red-500" },
+    { label: "Edificios", value: edificios?.edificios?.length || 0, icon: Building2, color: "from-blue-500 to-blue-600" },
+    { label: "Propietarios", value: propietarios?.length || 0, icon: UserCog, color: "from-purple-500 to-purple-600" },
+    { label: "Departamentos", value: departamentos?.length || 0, icon: Home, color: "from-cyan-500 to-cyan-600" },
+    { label: "Cargos", value: cargos?.length || 0, icon: Receipt, color: "from-amber-500 to-amber-600" },
+    { label: "Pagos", value: pagos?.length || 0, icon: Banknote, color: "from-green-500 to-green-600" },
+    { label: "Gastos", value: gastos?.length || 0, icon: Wallet, color: "from-red-500 to-red-600" },
   ];
 
   const estadoCargosData = useMemo(() => {
@@ -301,19 +329,19 @@ function DashboardSection() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         {stats.map((s) => {
           const Icon = s.icon;
           return (
-            <Card key={s.label}>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className={`w-9 h-9 rounded-lg ${s.color} flex items-center justify-center`}>
+            <Card key={s.label} className="overflow-hidden border-slate-200 dark:border-slate-800">
+              <CardContent className="p-4 md:p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.color} flex items-center justify-center shadow-lg`}>
                     <Icon className="w-5 h-5 text-white" />
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{s.value}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
+                <p className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">{s.value}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.label}</p>
               </CardContent>
             </Card>
           );
@@ -328,7 +356,9 @@ function DashboardSection() {
                 <p className="text-sm text-slate-500">Total Recaudado</p>
                 <p className="text-2xl font-bold text-green-600 mt-1">{formatMoney(totalPagos)}</p>
               </div>
-              <TrendingUp className="w-10 h-10 text-green-500 opacity-50" />
+              <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -339,7 +369,9 @@ function DashboardSection() {
                 <p className="text-sm text-slate-500">Total Gastos</p>
                 <p className="text-2xl font-bold text-red-600 mt-1">{formatMoney(totalGastos)}</p>
               </div>
-              <TrendingDown className="w-10 h-10 text-red-500 opacity-50" />
+              <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <TrendingDown className="w-6 h-6 text-red-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -350,7 +382,9 @@ function DashboardSection() {
                 <p className="text-sm text-slate-500">Por Cobrar</p>
                 <p className="text-2xl font-bold text-amber-600 mt-1">{formatMoney(totalPendiente)}</p>
               </div>
-              <Clock className="w-10 h-10 text-amber-500 opacity-50" />
+              <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-amber-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -377,7 +411,8 @@ function DashboardSection() {
 }
 
 function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
-  const { data, loading, error, reload, setData } = useFetch(() => edificiosApi.listar());
+  const { data, loading, error, reload } = useFetch(() => edificiosApi.listar());
+  const { data: departamentosData } = useFetch(() => departamentosApi.listar());
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Edificio | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; nombre: string } | null>(null);
@@ -385,7 +420,10 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
 
   const filtered = useMemo(() => {
     const list = data?.edificios || [];
-    return list.filter((e) => e.nombre.toLowerCase().includes(search.toLowerCase()));
+    return list.filter((e) =>
+      e.nombre.toLowerCase().includes(search.toLowerCase()) ||
+      (e.direccion || "").toLowerCase().includes(search.toLowerCase())
+    );
   }, [data, search]);
 
   const handleSave = async (form: Partial<Edificio>) => {
@@ -416,60 +454,94 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
     }
   };
 
+  const countDepartamentos = (edificioId: number) =>
+    (departamentosData || []).filter((d) => d.edificio?.id === edificioId).length;
+
   return (
-    <>
-      <TableCard
-        title="Edificios registrados"
+    <div className="space-y-4">
+      <SectionHeader
+        title="Edificios"
+        subtitle="Vista general de los edificios administrados"
         action={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo
-          </Button>
+          <>
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <Input
+                className="pl-10 w-full md:w-72"
+                placeholder="Buscar edificio o direccion..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" />Nuevo edificio
+            </Button>
+          </>
         }
-      >
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Nombre</th>
-                  <th className="py-3 px-3">Direccion</th>
-                  <th className="py-3 px-3">Pisos</th>
-                  <th className="py-3 px-3">Estado</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e) => (
-                  <tr key={e.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{e.id}</td>
-                    <td className="py-3 px-3 font-medium">{e.nombre}</td>
-                    <td className="py-3 px-3 text-slate-500">{e.direccion}</td>
-                    <td className="py-3 px-3">{e.numeroPisos || "-"}</td>
-                    <td className="py-3 px-3"><Badge>{e.estado}</Badge></td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => { setEditing(e); setOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded mr-1">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => setConfirm({ id: e.id, nombre: e.nombre })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
+      />
+
+      <LoadingOrError loading={loading} error={error} onRetry={reload} />
+
+      {data && !loading && !error && (
+        filtered.length === 0 ? (
+          <Card>
+            <EmptyState title="Sin edificios registrados" description="Crea el primer edificio para comenzar." icon={Building2} />
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((e) => (
+              <Card key={e.id} className="overflow-hidden group hover:shadow-xl transition-all border-slate-200 dark:border-slate-800">
+                <div className="relative aspect-[4/3] overflow-hidden bg-slate-200 dark:bg-slate-800">
+                  <EdificioImage nombre={e.nombre} id={e.id} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  <div className="absolute top-3 left-3">
+                    <Badge className={e.estado === "ACTIVO" ? "bg-green-500 text-white" : "bg-slate-500 text-white"}>
+                      {e.estado}
+                    </Badge>
+                  </div>
+                  <div className="absolute top-3 right-3 flex gap-1">
+                    <button
+                      onClick={() => { setEditing(e); setOpen(true); }}
+                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-slate-700 shadow-sm"
+                      title="Editar"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setConfirm({ id: e.id, nombre: e.nombre })}
+                      className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-red-600 shadow-sm"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <p className="text-white/80 text-xs font-medium">Pisos: {e.numeroPisos || "-"}</p>
+                  </div>
+                </div>
+                <CardContent className="p-4">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base line-clamp-1">{e.nombre}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-start gap-1.5 line-clamp-2">
+                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>{e.direccion}</span>
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>{countDepartamentos(e.id)} departamentos</span>
+                    </div>
+                    {e.descripcion && (
+                      <span className="text-[10px] text-slate-400 line-clamp-1 max-w-[140px]" title={e.descripcion}>
+                        {e.descripcion}
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        )}
-      </TableCard>
+        )
+      )}
 
       <EdificioForm open={open} onClose={() => { setOpen(false); setEditing(null); }} editing={editing} onSave={handleSave} />
       <ConfirmDialog
@@ -478,7 +550,7 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
+    </div>
   );
 }
 
@@ -510,7 +582,7 @@ function EdificioForm({ open, onClose, editing, onSave }: {
           </div>
           <div>
             <label className="text-sm font-medium">Estado</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.estado || "ACTIVO"} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.estado || "ACTIVO"} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
               <option value="ACTIVO">ACTIVO</option>
               <option value="INACTIVO">INACTIVO</option>
             </select>
@@ -529,22 +601,37 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
   const { data, loading, error, reload } = useFetch(() => departamentosApi.listar());
   const { data: edificiosData } = useFetch(() => edificiosApi.listar());
   const { data: propietariosData } = useFetch(() => propietariosApi.listar());
+  const { data: inquilinosData } = useFetch(() => inquilinosApi.listar());
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; numero: string } | null>(null);
+  const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Departamento | null>(null);
 
   const edificios = edificiosData?.edificios || [];
   const propietarios = propietariosData || [];
+  const inquilinos = inquilinosData || [];
 
   const filtered = useMemo(() => {
     const list = data || [];
-    return list.filter((d) =>
-      d.numero.toLowerCase().includes(search.toLowerCase()) ||
-      d.edificio?.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      (d.propietario?.cedula || "").includes(search)
-    );
-  }, [data, search]);
+    return list.filter((d) => {
+      const matchEdif = edificioFilter === "all" || d.edificio?.id === edificioFilter;
+      const s = search.toLowerCase();
+      const matchSearch = !s ||
+        d.numero.toLowerCase().includes(s) ||
+        d.edificio?.nombre.toLowerCase().includes(s) ||
+        (d.propietario?.cedula || "").includes(search) ||
+        (d.propietario?.usuario?.nombre || "").toLowerCase().includes(s);
+      return matchEdif && matchSearch;
+    });
+  }, [data, edificioFilter, search]);
+
+  useEffect(() => {
+    if (selected && !filtered.some((d) => d.id === selected.id)) {
+      setSelected(null);
+    }
+  }, [filtered, selected]);
 
   const handleSave = async (edificioId: number, propietarioId: number, form: Partial<Departamento>) => {
     try {
@@ -568,70 +655,152 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
       await departamentosApi.eliminar(id);
       onToast("Departamento eliminado", "ok");
       setConfirm(null);
+      if (selected?.id === id) setSelected(null);
       reload();
     } catch (e) {
       onToast(e instanceof Error ? e.message : "Error", "err");
     }
   };
 
+  const getInquilinoActivo = (departamentoId: number): Inquilino | null => {
+    return inquilinos.find((i) => i.departamento?.id === departamentoId && i.estado === "ACTIVO") || null;
+  };
+
   return (
-    <>
-      <TableCard
+    <div className="space-y-4">
+      <SectionHeader
         title="Departamentos"
+        subtitle="Gestiona los departamentos por edificio y consulta su informacion"
         action={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo
-          </Button>
+          <>
+            <div className="relative">
+              <Filter className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <select
+                className="pl-9 pr-3 h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm min-w-[180px]"
+                value={edificioFilter}
+                onChange={(e) => setEdificioFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+              >
+                <option value="all">Todos los edificios</option>
+                {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </select>
+            </div>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" />Nuevo
+            </Button>
+          </>
         }
-      >
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar por numero, edificio o cedula..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className={selected ? "lg:col-span-5 xl:col-span-4" : "lg:col-span-12"}>
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">Listado de departamentos</CardTitle>
+                <Badge variant="secondary">{filtered.length}</Badge>
+              </div>
+              <div className="relative pt-2">
+                <Search className="absolute left-3 top-4 w-4 h-4 text-slate-400" />
+                <Input
+                  className="pl-10"
+                  placeholder="Buscar por numero, edificio, propietario..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="max-h-[60vh] lg:max-h-[68vh] overflow-y-auto">
+              <LoadingOrError loading={loading} error={error} onRetry={reload} />
+              {data && !loading && !error && (
+                filtered.length === 0 ? (
+                  <EmptyState title="Sin departamentos" description="No hay departamentos con los filtros actuales." icon={Home} />
+                ) : (
+                  <div className="space-y-2">
+                    {filtered.map((d) => {
+                      const isSelected = selected?.id === d.id;
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => setSelected(d)}
+                          className={`w-full text-left p-3 rounded-xl border transition-all ${
+                            isSelected
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-md"
+                              : "border-slate-200 dark:border-slate-800 hover:border-blue-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                                  {d.numero}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                    Depto. {d.numero}
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                    {d.edificio?.nombre}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                                {d.piso != null && (
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">Piso {d.piso}</span>
+                                )}
+                                {d.area != null && (
+                                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">{d.area} m2</span>
+                                )}
+                                <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                  Alicuota {formatMoney(d.alicuota)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              {getInquilinoActivo(d.id) ? (
+                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 border text-[10px]">Con inquilino</Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-700 border-slate-200 border text-[10px]">Sin inquilino</Badge>
+                              )}
+                              <ChevronRight className={`w-4 h-4 text-slate-400 ${isSelected ? "text-blue-600" : ""}`} />
+                            </div>
+                          </div>
+                          <div className="mt-2 flex justify-end gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditing(d); setOpen(true); }}
+                              className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirm({ id: d.id, numero: d.numero }); }}
+                              className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                            </button>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </CardContent>
+          </Card>
         </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Numero</th>
-                  <th className="py-3 px-3">Edificio</th>
-                  <th className="py-3 px-3">Piso</th>
-                  <th className="py-3 px-3">Area</th>
-                  <th className="py-3 px-3">Alicuota</th>
-                  <th className="py-3 px-3">Propietario</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{d.id}</td>
-                    <td className="py-3 px-3 font-medium">{d.numero}</td>
-                    <td className="py-3 px-3">{d.edificio?.nombre}</td>
-                    <td className="py-3 px-3">{d.piso || "-"}</td>
-                    <td className="py-3 px-3">{d.area ?? "-"}</td>
-                    <td className="py-3 px-3">{d.alicuota}</td>
-                    <td className="py-3 px-3">{d.propietario?.cedula || "-"}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => { setEditing(d); setOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded mr-1">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => setConfirm({ id: d.id, numero: d.numero })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
+
+        {selected && (
+          <div className="lg:col-span-7 xl:col-span-8">
+            <DepartamentoDetalle
+              departamento={selected}
+              inquilinoActivo={getInquilinoActivo(selected.id)}
+              onClose={() => setSelected(null)}
+              onEdit={() => { setEditing(selected); setOpen(true); }}
+            />
           </div>
         )}
-      </TableCard>
+      </div>
 
       <DepartamentoForm
         open={open} onClose={() => { setOpen(false); setEditing(null); }}
@@ -643,7 +812,134 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
+    </div>
+  );
+}
+
+function DepartamentoDetalle({
+  departamento, inquilinoActivo, onClose, onEdit,
+}: {
+  departamento: Departamento; inquilinoActivo: Inquilino | null; onClose: () => void; onEdit: () => void;
+}) {
+  const info: { label: string; value: React.ReactNode; icon: any }[] = [
+    { label: "Numero", value: departamento.numero, icon: Hash },
+    { label: "Edificio", value: departamento.edificio?.nombre || "-", icon: Building2 },
+    { label: "Piso", value: departamento.piso ?? "-", icon: Layers },
+    { label: "Area", value: departamento.area ? `${departamento.area} m2` : "-", icon: Square },
+    { label: "Alicuota", value: formatMoney(departamento.alicuota), icon: DollarSign },
+    { label: "Identificador", value: departamento.identificadorCompleto || `${departamento.edificio?.nombre}-${departamento.numero}`, icon: HashIcon },
+  ];
+
+  const prop = departamento.propietario;
+  const persona = inquilinoActivo || prop;
+  const personaTitulo = inquilinoActivo ? "Inquilino activo" : "Propietario";
+
+  const personaInfo: { label: string; value: React.ReactNode; icon: any }[] = persona
+    ? [
+        { label: "Cedula", value: ("cedula" in persona ? persona.cedula : prop?.cedula) || "-", icon: IdCard },
+        { label: "Nombre", value: persona.nombre || `${prop?.usuario?.nombre || ""} ${prop?.usuario?.apellido || ""}`.trim() || "-", icon: UserCog },
+        { label: "Apellido", value: persona.apellido || prop?.usuario?.apellido || "-", icon: UserCog },
+        { label: "Email", value: ("correo" in persona ? persona.correo : prop?.usuario?.email) || prop?.usuario?.email || "-", icon: Mail },
+        { label: "Telefono", value: ("telefono" in persona ? persona.telefono : prop?.telefono) || "-", icon: Phone },
+        ...(inquilinoActivo && inquilinoActivo.fechaIngreso
+          ? [{ label: "Fecha ingreso", value: formatDate(inquilinoActivo.fechaIngreso), icon: Calendar }]
+          : []),
+        ...(inquilinoActivo
+          ? [{ label: "Estado", value: <Badge className="bg-green-100 text-green-700 border-green-200 border">{inquilinoActivo.estado}</Badge>, icon: CheckCircle2 }]
+          : []),
+      ]
+    : [];
+
+  return (
+    <Card className="h-full overflow-hidden">
+      <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold shrink-0">
+              {departamento.numero}
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-base">Departamento {departamento.numero}</CardTitle>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {departamento.edificio?.nombre} {departamento.identificadorCompleto ? `- ${departamento.identificadorCompleto}` : ""}
+              </p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            <Edit2 className="w-3.5 h-3.5 mr-1" />Editar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 md:p-5 max-h-[60vh] lg:max-h-[68vh] overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-900/40">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <Home className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Informacion del departamento</h3>
+            </div>
+            <dl className="space-y-2.5">
+              {info.map((it) => {
+                const Icon = it.icon;
+                return (
+                  <div key={it.label} className="flex items-start gap-3 text-sm">
+                    <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <dt className="text-xs text-slate-500">{it.label}</dt>
+                      <dd className="font-medium text-slate-900 dark:text-white break-words">{it.value}</dd>
+                    </div>
+                  </div>
+                );
+              })}
+              {departamento.observaciones && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-xs text-slate-500 mb-1">Observaciones</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">{departamento.observaciones}</p>
+                </div>
+              )}
+            </dl>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-900/40">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${inquilinoActivo ? "bg-purple-100 dark:bg-purple-900/40" : "bg-emerald-100 dark:bg-emerald-900/40"}`}>
+                  <UserCog className={`w-4 h-4 ${inquilinoActivo ? "text-purple-600" : "text-emerald-600"}`} />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">{personaTitulo}</h3>
+              </div>
+              {inquilinoActivo ? (
+                <Badge className="bg-purple-100 text-purple-700 border-purple-200 border">Inquilino</Badge>
+              ) : (
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 border">Propietario</Badge>
+              )}
+            </div>
+            {persona ? (
+              <dl className="space-y-2.5">
+                {personaInfo.map((it) => {
+                  const Icon = it.icon;
+                  return (
+                    <div key={it.label} className="flex items-start gap-3 text-sm">
+                      <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <dt className="text-xs text-slate-500">{it.label}</dt>
+                        <dd className="font-medium text-slate-900 dark:text-white break-words">{it.value}</dd>
+                      </div>
+                    </div>
+                  );
+                })}
+              </dl>
+            ) : (
+              <EmptyState title="Sin informacion" description="No hay propietario asignado." icon={UserCog} />
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -684,14 +980,14 @@ function DepartamentoForm({ open, onClose, editing, edificios, propietarios, onS
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">Edificio *</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={edificioId || ""} onChange={(e) => setEdificioId(Number(e.target.value))}>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={edificioId || ""} onChange={(e) => setEdificioId(Number(e.target.value))}>
               <option value="">Seleccionar...</option>
               {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm font-medium">Propietario *</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(Number(e.target.value))}>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(Number(e.target.value))}>
               <option value="">Seleccionar...</option>
               {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
             </select>
@@ -726,17 +1022,40 @@ function DepartamentoForm({ open, onClose, editing, edificios, propietarios, onS
 
 function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const { data, loading, error, reload } = useFetch(() => propietariosApi.listar());
+  const { data: edificiosData } = useFetch(() => edificiosApi.listar());
+  const { data: departamentosData } = useFetch(() => departamentosApi.listar());
   const [confirm, setConfirm] = useState<{ id: number; cedula: string } | null>(null);
+  const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
+
+  const edificios = edificiosData?.edificios || [];
+
+  const departamentosPorPropietario = useMemo(() => {
+    const map: Record<number, Departamento[]> = {};
+    (departamentosData || []).forEach((d) => {
+      const pid = d.propietario?.id;
+      if (pid != null) {
+        if (!map[pid]) map[pid] = [];
+        map[pid].push(d);
+      }
+    });
+    return map;
+  }, [departamentosData]);
 
   const filtered = useMemo(() => {
     const list = data || [];
-    return list.filter((p) =>
-      p.cedula.includes(search) ||
-      (p.usuario?.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.usuario?.email || "").toLowerCase().includes(search.toLowerCase())
-    );
-  }, [data, search]);
+    return list.filter((p) => {
+      const dpts = departamentosPorPropietario[p.id] || [];
+      const matchEdif = edificioFilter === "all" || dpts.some((d) => d.edificio?.id === edificioFilter);
+      const s = search.toLowerCase();
+      const matchSearch = !s ||
+        p.cedula.includes(search) ||
+        (p.usuario?.nombre || "").toLowerCase().includes(s) ||
+        (p.usuario?.apellido || "").toLowerCase().includes(s) ||
+        (p.usuario?.email || "").toLowerCase().includes(s);
+      return matchEdif && matchSearch;
+    });
+  }, [data, edificioFilter, search, departamentosPorPropietario]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -750,49 +1069,96 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
   };
 
   return (
-    <>
-      <TableCard title="Propietarios">
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar por cedula, nombre o email..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Cedula</th>
-                  <th className="py-3 px-3">Nombre</th>
-                  <th className="py-3 px-3">Email</th>
-                  <th className="py-3 px-3">Telefono</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{p.id}</td>
-                    <td className="py-3 px-3 font-medium">{p.cedula}</td>
-                    <td className="py-3 px-3">{p.usuario ? `${p.usuario.nombre} ${p.usuario.apellido || ""}` : "-"}</td>
-                    <td className="py-3 px-3 text-slate-500">{p.usuario?.email || "-"}</td>
-                    <td className="py-3 px-3">{p.telefono || "-"}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => setConfirm({ id: p.id, cedula: p.cedula })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
+    <div className="space-y-4">
+      <SectionHeader
+        title="Propietarios"
+        subtitle="Consulta los propietarios y los departamentos que administran"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Filter className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <select
+                className="pl-9 pr-3 h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm min-w-[180px]"
+                value={edificioFilter}
+                onChange={(e) => setEdificioFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+              >
+                <option value="all">Todos los edificios</option>
+                {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </select>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <Input
+                className="pl-10 w-full md:w-72"
+                placeholder="Buscar cedula, nombre, email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
-        )}
-      </TableCard>
+        }
+      />
+
+      <Card>
+        <CardContent className="p-0">
+          <LoadingOrError loading={loading} error={error} onRetry={reload} />
+          {data && !loading && !error && (
+            filtered.length === 0 ? (
+              <EmptyState title="Sin propietarios" description="No hay propietarios con los filtros actuales." icon={UserCog} />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                      <th className="py-3 px-4">Cedula</th>
+                      <th className="py-3 px-4">Nombre</th>
+                      <th className="py-3 px-4">Email</th>
+                      <th className="py-3 px-4">Telefono</th>
+                      <th className="py-3 px-4">Edificios / Deptos</th>
+                      <th className="py-3 px-4 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => {
+                      const dpts = departamentosPorPropietario[p.id] || [];
+                      const edifsSet = new Set(dpts.map((d) => d.edificio?.id).filter(Boolean));
+                      return (
+                        <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                          <td className="py-3 px-4 font-medium">{p.cedula}</td>
+                          <td className="py-3 px-4">{p.usuario ? `${p.usuario.nombre} ${p.usuario.apellido || ""}` : "-"}</td>
+                          <td className="py-3 px-4 text-slate-500">{p.usuario?.email || "-"}</td>
+                          <td className="py-3 px-4">{p.telefono || "-"}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge className="bg-blue-100 text-blue-700 border-blue-200 border text-[10px]">
+                                {edifsSet.size} edificio{edifsSet.size === 1 ? "" : "s"}
+                              </Badge>
+                              <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200 border text-[10px]">
+                                {dpts.length} depto{dpts.length === 1 ? "" : "s"}
+                              </Badge>
+                              {dpts.slice(0, 3).map((d) => (
+                                <span key={d.id} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  {d.identificadorCompleto || `${d.edificio?.nombre}-${d.numero}`}
+                                </span>
+                              ))}
+                              {dpts.length > 3 && <span className="text-[10px] text-slate-500">+{dpts.length - 3}</span>}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button onClick={() => setConfirm({ id: p.id, cedula: p.cedula })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+        </CardContent>
+      </Card>
 
       <ConfirmDialog
         open={!!confirm}
@@ -800,199 +1166,7 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
-  );
-}
-
-function InquilinosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
-  const { data, loading, error, reload } = useFetch(() => inquilinosApi.listar());
-  const { data: departamentosData } = useFetch(() => departamentosApi.listar());
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Inquilino | null>(null);
-  const [confirm, setConfirm] = useState<{ id: number; nombre: string } | null>(null);
-  const [search, setSearch] = useState("");
-
-  const filtered = useMemo(() => {
-    const list = data || [];
-    return list.filter((i) =>
-      i.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      i.cedula.includes(search)
-    );
-  }, [data, search]);
-
-  const handleSave = async (departamentoId: number, form: Partial<Inquilino>) => {
-    try {
-      if (editing) {
-        await inquilinosApi.actualizar(editing.id, form);
-        onToast("Inquilino actualizado", "ok");
-      } else {
-        await inquilinosApi.crear(departamentoId, form);
-        onToast("Inquilino creado", "ok");
-      }
-      setOpen(false);
-      setEditing(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      await inquilinosApi.eliminar(id);
-      onToast("Inquilino eliminado", "ok");
-      setConfirm(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  return (
-    <>
-      <TableCard
-        title="Inquilinos"
-        action={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo
-          </Button>
-        }
-      >
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar por nombre o cedula..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Cedula</th>
-                  <th className="py-3 px-3">Nombre</th>
-                  <th className="py-3 px-3">Departamento</th>
-                  <th className="py-3 px-3">Telefono</th>
-                  <th className="py-3 px-3">Estado</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((i) => (
-                  <tr key={i.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{i.id}</td>
-                    <td className="py-3 px-3 font-medium">{i.cedula}</td>
-                    <td className="py-3 px-3">{i.nombre} {i.apellido || ""}</td>
-                    <td className="py-3 px-3">{i.departamento?.identificadorCompleto || "-"}</td>
-                    <td className="py-3 px-3">{i.telefono || "-"}</td>
-                    <td className="py-3 px-3"><Badge>{i.estado}</Badge></td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => { setEditing(i); setOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded mr-1">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => setConfirm({ id: i.id, nombre: i.nombre })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </TableCard>
-
-      <InquilinoForm
-        open={open} onClose={() => { setOpen(false); setEditing(null); }}
-        editing={editing} departamentos={departamentosData || []} onSave={handleSave}
-      />
-      <ConfirmDialog
-        open={!!confirm}
-        message={`Eliminar al inquilino "${confirm?.nombre}"?`}
-        onConfirm={() => confirm && handleDelete(confirm.id)}
-        onCancel={() => setConfirm(null)}
-      />
-    </>
-  );
-}
-
-function InquilinoForm({ open, onClose, editing, departamentos, onSave }: {
-  open: boolean; onClose: () => void; editing: Inquilino | null;
-  departamentos: Departamento[]; onSave: (departamentoId: number, data: Partial<Inquilino>) => void;
-}) {
-  const [form, setForm] = useState<Partial<Inquilino>>({});
-  const [departamentoId, setDepartamentoId] = useState<number | null>(null);
-  useEffect(() => {
-    if (editing) {
-      setForm(editing);
-      setDepartamentoId(editing.departamento?.id || null);
-    } else {
-      setForm({ estado: "ACTIVO" });
-      setDepartamentoId(null);
-    }
-  }, [editing, open]);
-  return (
-    <Modal open={open} onClose={onClose} title={editing ? "Editar Inquilino" : "Nuevo Inquilino"} footer={
-      <>
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button
-          disabled={!departamentoId}
-          onClick={() => departamentoId && onSave(departamentoId, form)}
-        >
-          Guardar
-        </Button>
-      </>
-    }>
-      <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium">Departamento *</label>
-          <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={departamentoId || ""} onChange={(e) => setDepartamentoId(Number(e.target.value))}>
-            <option value="">Seleccionar...</option>
-            {departamentos.map((d) => <option key={d.id} value={d.id}>{d.identificadorCompleto || `${d.edificio?.nombre} - ${d.numero}`}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Cedula *</label>
-            <Input value={form.cedula || ""} onChange={(e) => setForm({ ...form, cedula: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Nombre *</label>
-            <Input value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          </div>
-        </div>
-        <div>
-          <label className="text-sm font-medium">Apellido</label>
-          <Input value={form.apellido || ""} onChange={(e) => setForm({ ...form, apellido: e.target.value })} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Telefono</label>
-            <Input value={form.telefono || ""} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Correo</label>
-            <Input type="email" value={form.correo || ""} onChange={(e) => setForm({ ...form, correo: e.target.value })} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Fecha ingreso</label>
-            <Input type="date" value={form.fechaIngreso || ""} onChange={(e) => setForm({ ...form, fechaIngreso: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Estado</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.estado || "ACTIVO"} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
-              <option value="ACTIVO">ACTIVO</option>
-              <option value="INACTIVO">INACTIVO</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -1001,21 +1175,26 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
   const { data: departamentosData } = useFetch(() => departamentosApi.listar());
   const { data: tiposData } = useFetch(() => tiposCargosApi.listarActivos());
   const [open, setOpen] = useState(false);
+  const [pagoOpen, setPagoOpen] = useState<Cargo | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; descripcion: string } | null>(null);
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState<PeriodValue>({ mode: "current" });
+  const [generating, setGenerating] = useState(false);
+
+  const filteredByPeriod = useMemo(() => filterByPeriod(data || [], period, "fechaGeneracion"), [data, period]);
 
   const filtered = useMemo(() => {
-    const list = data || [];
-    return list.filter((c) =>
-      (c.descripcion || "").toLowerCase().includes(search.toLowerCase()) ||
-      c.departamento?.identificadorCompleto?.toLowerCase().includes(search.toLowerCase()) ||
-      c.tipoCargo?.nombre.toLowerCase().includes(search.toLowerCase())
+    const s = search.toLowerCase();
+    return filteredByPeriod.filter((c) =>
+      (c.descripcion || "").toLowerCase().includes(s) ||
+      c.departamento?.identificadorCompleto?.toLowerCase().includes(s) ||
+      c.tipoCargo?.nombre.toLowerCase().includes(s)
     );
-  }, [data, search]);
+  }, [filteredByPeriod, search]);
 
-  const totalCargos = data?.reduce((s, c) => s + (c.valor || 0), 0) || 0;
-  const totalPagado = data?.filter((c) => c.estado === "PAGADO").reduce((s, c) => s + (c.valor || 0), 0) || 0;
-  const totalPendiente = data?.filter((c) => c.estado === "PENDIENTE" || c.estado === "PARCIAL").reduce((s, c) => s + (c.valor || 0), 0) || 0;
+  const totalCargos = filteredByPeriod.reduce((s, c) => s + (c.valor || 0), 0);
+  const totalPagado = filteredByPeriod.filter((c) => c.estado === "PAGADO").reduce((s, c) => s + (c.valor || 0), 0);
+  const totalPendiente = filteredByPeriod.filter((c) => c.estado === "PENDIENTE" || c.estado === "PARCIAL").reduce((s, c) => s + (c.valor || 0), 0);
 
   const handleSave = async (departamentoId: number, tipoCargoId: number, form: Partial<Cargo>) => {
     try {
@@ -1039,70 +1218,149 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     }
   };
 
+  const handleGenerarAlicuotas = async () => {
+    const now = new Date();
+    setGenerating(true);
+    try {
+      const result = await cargosApi.generarAlicuotas({
+        mes: now.getMonth() + 1,
+        anio: now.getFullYear(),
+        fechaVencimiento: null,
+      });
+      onToast(`Alicuotas generadas: ${result.cargosCreados} cargos`, "ok");
+      reload();
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : "Error al generar alicuotas", "err");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
-    <>
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Total Cargos</p><p className="text-xl font-bold">{formatMoney(totalCargos)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Cobrado</p><p className="text-xl font-bold text-green-600">{formatMoney(totalPagado)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Pendiente</p><p className="text-xl font-bold text-amber-600">{formatMoney(totalPendiente)}</p></CardContent></Card>
+    <div className="space-y-4">
+      <SectionHeader
+        title="Cargos"
+        subtitle="Gestiona los cargos aplicados a los departamentos"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={handleGenerarAlicuotas} disabled={generating}>
+              <Receipt className="w-4 h-4 mr-2" />
+              {generating ? "Generando..." : "Generar Alicuotas del Mes"}
+            </Button>
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />Nuevo cargo
+            </Button>
+          </div>
+        }
+      />
+
+      <Card>
+        <CardContent className="p-4">
+          <PeriodFilter value={period} onChange={setPeriod} />
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Total Cargos ({periodLabel(period)})</p>
+              <p className="text-xl md:text-2xl font-bold mt-1">{formatMoney(totalCargos)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-blue-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Cobrado</p>
+              <p className="text-xl md:text-2xl font-bold text-green-600 mt-1">{formatMoney(totalPagado)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Pendiente</p>
+              <p className="text-xl md:text-2xl font-bold text-amber-600 mt-1">{formatMoney(totalPendiente)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-600" />
+            </div>
+          </div>
+        </CardContent></Card>
       </div>
+
       <TableCard
         title="Cargos aplicados"
         action={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo cargo
-          </Button>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+            <Input className="pl-10 w-64" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
         }
       >
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
         <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Departamento</th>
-                  <th className="py-3 px-3">Tipo</th>
-                  <th className="py-3 px-3">Descripcion</th>
-                  <th className="py-3 px-3">Valor</th>
-                  <th className="py-3 px-3">Vencimiento</th>
-                  <th className="py-3 px-3">Estado</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{c.id}</td>
-                    <td className="py-3 px-3">{c.departamento?.identificadorCompleto || "-"}</td>
-                    <td className="py-3 px-3">{c.tipoCargo?.nombre}</td>
-                    <td className="py-3 px-3">{c.descripcion || "-"}</td>
-                    <td className="py-3 px-3 font-medium">{formatMoney(c.valor)}</td>
-                    <td className="py-3 px-3">{formatDate(c.fechaVencimiento)}</td>
-                    <td className="py-3 px-3"><StatusBadge estado={c.estado} /></td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => setConfirm({ id: c.id, descripcion: c.descripcion || `Cargo ${c.id}` })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
+        {data && !loading && !error && (
+          filtered.length === 0 ? (
+            <EmptyState title="Sin cargos" description="No hay cargos en el periodo seleccionado." icon={Receipt} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <th className="py-3 px-3">Departamento</th>
+                    <th className="py-3 px-3">Tipo</th>
+                    <th className="py-3 px-3">Descripcion</th>
+                    <th className="py-3 px-3">Valor</th>
+                    <th className="py-3 px-3">Vencimiento</th>
+                    <th className="py-3 px-3">Estado</th>
+                    <th className="py-3 px-3 text-right">Acciones</th>
                   </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map((c) => (
+                    <tr key={c.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                      <td className="py-3 px-3">{c.departamento?.identificadorCompleto || "-"}</td>
+                      <td className="py-3 px-3">{c.tipoCargo?.nombre}</td>
+                      <td className="py-3 px-3 text-slate-500">{c.descripcion || "-"}</td>
+                      <td className="py-3 px-3 font-medium">{formatMoney(c.valor)}</td>
+                      <td className="py-3 px-3">{formatDate(c.fechaVencimiento)}</td>
+                      <td className="py-3 px-3"><StatusBadge estado={c.estado} /></td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex justify-end items-center gap-1">
+                          {c.estado !== "PAGADO" && c.estado !== "ANULADO" && (
+                            <Button size="sm" onClick={() => setPagoOpen(c)} className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700">
+                              <CreditCard className="w-3 h-3 mr-1" />Pagar
+                            </Button>
+                          )}
+                          <button onClick={() => setConfirm({ id: c.id, descripcion: c.descripcion || `Cargo ${c.id}` })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </TableCard>
 
       <CargoForm
         open={open} onClose={() => setOpen(false)}
-        departamentos={departamentosData || []} tipos={tiposData || []} onSave={handleSave}
+        departamentos={departamentosData || []} tipos={(tiposData as TipoCargo[]) || []} onSave={handleSave}
+      />
+      <PagoForm
+        open={!!pagoOpen} cargo={pagoOpen} onClose={() => setPagoOpen(null)}
+        onSaved={() => { setPagoOpen(null); reload(); onToast("Pago registrado correctamente", "ok"); }}
+        onError={(m) => onToast(m, "err")}
       />
       <ConfirmDialog
         open={!!confirm}
@@ -1110,7 +1368,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
+    </div>
   );
 }
 
@@ -1144,16 +1402,16 @@ function CargoForm({ open, onClose, departamentos, tipos, onSave }: {
       <div className="space-y-3">
         <div>
           <label className="text-sm font-medium">Departamento *</label>
-          <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={departamentoId || ""} onChange={(e) => setDepartamentoId(Number(e.target.value))}>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={departamentoId || ""} onChange={(e) => setDepartamentoId(Number(e.target.value))}>
             <option value="">Seleccionar...</option>
             {departamentos.map((d) => <option key={d.id} value={d.id}>{d.identificadorCompleto || `${d.edificio?.nombre} - ${d.numero}`}</option>)}
           </select>
         </div>
         <div>
           <label className="text-sm font-medium">Tipo de Cargo *</label>
-          <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={tipoCargoId || ""} onChange={(e) => setTipoCargoId(Number(e.target.value))}>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={tipoCargoId || ""} onChange={(e) => setTipoCargoId(Number(e.target.value))}>
             <option value="">Seleccionar...</option>
-            {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            {tipos.map((t: any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1179,21 +1437,110 @@ function CargoForm({ open, onClose, departamentos, tipos, onSave }: {
   );
 }
 
+function PagoForm({ open, cargo, onClose, onSaved, onError }: {
+  open: boolean; cargo: Cargo | null; onClose: () => void;
+  onSaved: () => void; onError: (m: string) => void;
+}) {
+  const [form, setForm] = useState<Partial<Pago>>({});
+  useEffect(() => {
+    if (open) {
+      setForm({
+        fecha: new Date().toISOString().substring(0, 10),
+        montoTotal: cargo?.valor || 0,
+        metodoPago: "TRANSFERENCIA",
+        numeroComprobante: "",
+        pagadoPor: "",
+      });
+    }
+  }, [open, cargo]);
+
+  const submit = async () => {
+    if (!cargo) return;
+    try {
+      await pagosApi.crear(cargo.departamento.id, null, {
+        pago: { ...form, fecha: form.fecha || new Date().toISOString().substring(0, 10) },
+        cargosIds: [cargo.id],
+      });
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Error al registrar pago");
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Registrar pago - ${formatMoney(cargo?.valor)}`} footer={
+      <>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button onClick={submit} className="bg-green-600 hover:bg-green-700">
+          <CheckCircle2 className="w-4 h-4 mr-2" />Registrar pago
+        </Button>
+      </>
+    }>
+      {cargo && (
+        <div className="space-y-3">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-500">Cargo</p>
+            <p className="font-medium">{cargo.tipoCargo?.nombre} - {cargo.departamento?.identificadorCompleto}</p>
+            <p className="text-sm text-slate-500 mt-1">Valor: <span className="font-semibold text-slate-900 dark:text-white">{formatMoney(cargo.valor)}</span></p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Fecha *</label>
+              <Input type="date" value={form.fecha || ""} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Monto *</label>
+              <Input type="number" step="0.01" value={form.montoTotal ?? 0} onChange={(e) => setForm({ ...form, montoTotal: e.target.value ? Number(e.target.value) : 0 })} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Metodo de pago</label>
+              <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.metodoPago || "TRANSFERENCIA"} onChange={(e) => setForm({ ...form, metodoPago: e.target.value })}>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="TARJETA">Tarjeta</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Nro. comprobante</label>
+              <Input value={form.numeroComprobante || ""} onChange={(e) => setForm({ ...form, numeroComprobante: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Pagado por</label>
+            <Input value={form.pagadoPor || ""} onChange={(e) => setForm({ ...form, pagadoPor: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Observaciones</label>
+            <Input value={form.observaciones || ""} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const { data, loading, error, reload } = useFetch(() => pagosApi.listar());
   const [confirm, setConfirm] = useState<{ id: number; monto: number } | null>(null);
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState<PeriodValue>({ mode: "current" });
+
+  const filteredByPeriod = useMemo(() => filterByPeriod(data || [], period, "fecha"), [data, period]);
 
   const filtered = useMemo(() => {
-    const list = data || [];
-    return list.filter((p) =>
-      p.departamento?.identificadorCompleto?.toLowerCase().includes(search.toLowerCase()) ||
-      (p.pagadoPor || "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.numeroComprobante || "").toLowerCase().includes(search.toLowerCase())
+    const s = search.toLowerCase();
+    return filteredByPeriod.filter((p) =>
+      p.departamento?.identificadorCompleto?.toLowerCase().includes(s) ||
+      (p.pagadoPor || "").toLowerCase().includes(s) ||
+      (p.numeroComprobante || "").toLowerCase().includes(s)
     );
-  }, [data, search]);
+  }, [filteredByPeriod, search]);
 
-  const total = data?.reduce((s, p) => s + (p.montoTotal || 0), 0) || 0;
+  const total = filteredByPeriod.reduce((s, p) => s + (p.montoTotal || 0), 0);
 
   const handleDelete = async (id: number) => {
     try {
@@ -1207,55 +1554,87 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
   };
 
   return (
-    <>
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Total Pagos</p><p className="text-xl font-bold text-green-600">{formatMoney(total)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Cantidad de pagos</p><p className="text-xl font-bold">{data?.length || 0}</p></CardContent></Card>
-      </div>
-      <TableCard title="Pagos registrados">
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar por departamento, pagado por o comprobante..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Fecha</th>
-                  <th className="py-3 px-3">Departamento</th>
-                  <th className="py-3 px-3">Monto</th>
-                  <th className="py-3 px-3">Metodo</th>
-                  <th className="py-3 px-3">Comprobante</th>
-                  <th className="py-3 px-3">Pagado por</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{p.id}</td>
-                    <td className="py-3 px-3">{formatDate(p.fecha)}</td>
-                    <td className="py-3 px-3">{p.departamento?.identificadorCompleto || "-"}</td>
-                    <td className="py-3 px-3 font-medium text-green-600">{formatMoney(p.montoTotal)}</td>
-                    <td className="py-3 px-3">{p.metodoPago || "-"}</td>
-                    <td className="py-3 px-3">{p.numeroComprobante || "-"}</td>
-                    <td className="py-3 px-3">{p.pagadoPor || "-"}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => setConfirm({ id: p.id, monto: p.montoTotal })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
+    <div className="space-y-4">
+      <SectionHeader
+        title="Pagos"
+        subtitle="Historial de pagos realizados"
+      />
+
+      <Card>
+        <CardContent className="p-4">
+          <PeriodFilter value={period} onChange={setPeriod} />
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Total Pagos ({periodLabel(period)})</p>
+              <p className="text-xl md:text-2xl font-bold text-green-600 mt-1">{formatMoney(total)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+              <Banknote className="w-5 h-5 text-green-600" />
+            </div>
           </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Cantidad de pagos</p>
+              <p className="text-xl md:text-2xl font-bold mt-1">{filteredByPeriod.length}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-blue-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+      </div>
+
+      <TableCard title="Pagos registrados" action={
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+          <Input className="pl-10 w-64" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      }>
+        <LoadingOrError loading={loading} error={error} onRetry={reload} />
+        {data && !loading && !error && (
+          filtered.length === 0 ? (
+            <EmptyState title="Sin pagos" description="No hay pagos en el periodo seleccionado." icon={Banknote} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <th className="py-3 px-3">Fecha</th>
+                    <th className="py-3 px-3">Departamento</th>
+                    <th className="py-3 px-3">Monto</th>
+                    <th className="py-3 px-3">Metodo</th>
+                    <th className="py-3 px-3">Comprobante</th>
+                    <th className="py-3 px-3">Pagado por</th>
+                    <th className="py-3 px-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => (
+                    <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                      <td className="py-3 px-3">{formatDate(p.fecha)}</td>
+                      <td className="py-3 px-3">{p.departamento?.identificadorCompleto || "-"}</td>
+                      <td className="py-3 px-3 font-medium text-green-600">{formatMoney(p.montoTotal)}</td>
+                      <td className="py-3 px-3">{p.metodoPago || "-"}</td>
+                      <td className="py-3 px-3">{p.numeroComprobante || "-"}</td>
+                      <td className="py-3 px-3">{p.pagadoPor || "-"}</td>
+                      <td className="py-3 px-3 text-right">
+                        <button onClick={() => setConfirm({ id: p.id, monto: p.montoTotal })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </TableCard>
 
@@ -1265,34 +1644,45 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
+    </div>
   );
 }
 
 function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const { data, loading, error, reload } = useFetch(() => gastosApi.listar());
   const { data: edificiosData } = useFetch(() => edificiosApi.listar());
-  const { data: tiposData } = useFetch(() => tiposGastosApi.listarActivos());
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Gasto | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; descripcion: string } | null>(null);
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState<PeriodValue>({ mode: "current" });
+  const [generating, setGenerating] = useState(false);
+
+  const filteredByPeriod = useMemo(() => filterByPeriod(data || [], period, "fecha"), [data, period]);
 
   const filtered = useMemo(() => {
-    const list = data || [];
-    return list.filter((g) =>
-      g.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-      g.edificio?.nombre.toLowerCase().includes(search.toLowerCase()) ||
-      g.tipoGasto?.nombre.toLowerCase().includes(search.toLowerCase())
+    const s = search.toLowerCase();
+    return filteredByPeriod.filter((g) =>
+      g.descripcion.toLowerCase().includes(s) ||
+      g.edificio?.nombre.toLowerCase().includes(s) ||
+      g.tipoGasto?.nombre.toLowerCase().includes(s)
     );
-  }, [data, search]);
+  }, [filteredByPeriod, search]);
 
-  const total = data?.reduce((s, g) => s + (g.valor || 0), 0) || 0;
+  const total = filteredByPeriod.reduce((s, g) => s + (g.valor || 0), 0);
+  const pendientesComprobante = filteredByPeriod.filter(comprobanteEsPendiente).length;
 
   const handleSave = async (edificioId: number, tipoGastoId: number, form: Partial<Gasto>) => {
     try {
-      await gastosApi.crear(edificioId, tipoGastoId, null, form);
-      onToast("Gasto registrado", "ok");
+      if (editing) {
+        await gastosApi.actualizar(editing.id, form);
+        onToast("Gasto actualizado", "ok");
+      } else {
+        await gastosApi.crear(edificioId, tipoGastoId, null, form);
+        onToast("Gasto registrado", "ok");
+      }
       setOpen(false);
+      setEditing(null);
       reload();
     } catch (e) {
       onToast(e instanceof Error ? e.message : "Error", "err");
@@ -1310,64 +1700,148 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     }
   };
 
+  const handleGenerarMensuales = async () => {
+    const now = new Date();
+    setGenerating(true);
+    try {
+      const result = await gastosApi.generarMensuales({ mes: now.getMonth() + 1, anio: now.getFullYear() });
+      onToast(`Gastos mensuales generados: ${result.gastosCreados}`, "ok");
+      reload();
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : "Error al generar gastos mensuales", "err");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
-    <>
-      <Card className="mb-4"><CardContent className="p-4"><p className="text-xs text-slate-500">Total Gastos</p><p className="text-xl font-bold text-red-600">{formatMoney(total)}</p></CardContent></Card>
-      <TableCard
-        title="Gastos registrados"
+    <div className="space-y-4">
+      <SectionHeader
+        title="Gastos"
+        subtitle="Control de gastos y comprobantes del condominio"
         action={
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo gasto
-          </Button>
-        }
-      >
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <Input className="pl-10" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Fecha</th>
-                  <th className="py-3 px-3">Edificio</th>
-                  <th className="py-3 px-3">Tipo</th>
-                  <th className="py-3 px-3">Descripcion</th>
-                  <th className="py-3 px-3">Valor</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((g) => (
-                  <tr key={g.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{g.id}</td>
-                    <td className="py-3 px-3">{formatDate(g.fecha)}</td>
-                    <td className="py-3 px-3">{g.edificio?.nombre}</td>
-                    <td className="py-3 px-3">{g.tipoGasto?.nombre}</td>
-                    <td className="py-3 px-3">{g.descripcion}</td>
-                    <td className="py-3 px-3 font-medium text-red-600">{formatMoney(g.valor)}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => setConfirm({ id: g.id, descripcion: g.descripcion })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={handleGenerarMensuales} disabled={generating}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              {generating ? "Generando..." : "Generar Gastos Mensuales"}
+            </Button>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" />Nuevo gasto
+            </Button>
           </div>
+        }
+      />
+
+      <Card>
+        <CardContent className="p-4">
+          <PeriodFilter value={period} onChange={setPeriod} />
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Total Gastos ({periodLabel(period)})</p>
+              <p className="text-xl md:text-2xl font-bold text-red-600 mt-1">{formatMoney(total)}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-red-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Comprobantes pendientes</p>
+              <p className="text-xl md:text-2xl font-bold text-amber-600 mt-1">{pendientesComprobante}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 md:p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500">Cantidad de gastos</p>
+              <p className="text-xl md:text-2xl font-bold mt-1">{filteredByPeriod.length}</p>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-blue-600" />
+            </div>
+          </div>
+        </CardContent></Card>
+      </div>
+
+      <TableCard title="Gastos registrados" action={
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+          <Input className="pl-10 w-64" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      }>
+        <LoadingOrError loading={loading} error={error} onRetry={reload} />
+        {data && !loading && !error && (
+          filtered.length === 0 ? (
+            <EmptyState title="Sin gastos" description="No hay gastos en el periodo seleccionado." icon={Wallet} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <th className="py-3 px-3">Fecha</th>
+                    <th className="py-3 px-3">Edificio</th>
+                    <th className="py-3 px-3">Tipo</th>
+                    <th className="py-3 px-3">Descripcion</th>
+                    <th className="py-3 px-3">Valor</th>
+                    <th className="py-3 px-3">Comprobante</th>
+                    <th className="py-3 px-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((g) => {
+                    const pend = comprobanteEsPendiente(g);
+                    return (
+                      <tr key={g.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                        <td className="py-3 px-3">{formatDate(g.fecha)}</td>
+                        <td className="py-3 px-3">{g.edificio?.nombre}</td>
+                        <td className="py-3 px-3">{g.tipoGasto?.nombre}</td>
+                        <td className="py-3 px-3">{g.descripcion}</td>
+                        <td className="py-3 px-3 font-medium text-red-600">{formatMoney(g.valor)}</td>
+                        <td className="py-3 px-3">
+                          {pend ? (
+                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 border text-[10px]">
+                              {COMPROBANTE_PENDIENTE}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1" title={g.comprobante || ""}>
+                              {g.comprobante}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex justify-end items-center gap-1">
+                            <Button size="sm" variant="outline" onClick={() => { setEditing(g); setOpen(true); }} className="h-7 px-2 text-xs">
+                              <Edit2 className="w-3 h-3 mr-1" />Editar
+                            </Button>
+                            <button onClick={() => setConfirm({ id: g.id, descripcion: g.descripcion })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </TableCard>
 
       <GastoForm
-        open={open} onClose={() => setOpen(false)}
-        edificios={edificiosData?.edificios || []} tipos={tiposData || []} onSave={handleSave}
+        open={open} onClose={() => { setOpen(false); setEditing(null); }}
+        edificios={edificiosData?.edificios || []} tipos={[]} editing={editing} onSave={handleSave}
       />
       <ConfirmDialog
         open={!!confirm}
@@ -1375,27 +1849,35 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
-    </>
+    </div>
   );
 }
 
-function GastoForm({ open, onClose, edificios, tipos, onSave }: {
+function GastoForm({ open, onClose, edificios, tipos, editing, onSave }: {
   open: boolean; onClose: () => void;
-  edificios: Edificio[]; tipos: TipoGasto[];
+  edificios: Edificio[]; tipos: any[]; editing: Gasto | null;
   onSave: (edificioId: number, tipoGastoId: number, data: Partial<Gasto>) => void;
 }) {
   const [form, setForm] = useState<Partial<Gasto>>({});
   const [edificioId, setEdificioId] = useState<number | null>(null);
   const [tipoGastoId, setTipoGastoId] = useState<number | null>(null);
   useEffect(() => {
-    if (open) {
-      setForm({ fecha: new Date().toISOString().substring(0, 10) });
+    if (editing) {
+      setForm({ ...editing, comprobante: editing.comprobante || COMPROBANTE_PENDIENTE });
+      setEdificioId(editing.edificio?.id || null);
+      setTipoGastoId(editing.tipoGasto?.id || null);
+    } else {
+      setForm({
+        fecha: new Date().toISOString().substring(0, 10),
+        comprobante: COMPROBANTE_PENDIENTE,
+        periodicidadMensual: false,
+      });
       setEdificioId(null);
       setTipoGastoId(null);
     }
-  }, [open]);
+  }, [editing, open]);
   return (
-    <Modal open={open} onClose={onClose} title="Nuevo Gasto" footer={
+    <Modal open={open} onClose={onClose} title={editing ? "Editar Gasto" : "Nuevo Gasto"} footer={
       <>
         <Button variant="outline" onClick={onClose}>Cancelar</Button>
         <Button
@@ -1410,16 +1892,16 @@ function GastoForm({ open, onClose, edificios, tipos, onSave }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">Edificio *</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={edificioId || ""} onChange={(e) => setEdificioId(Number(e.target.value))}>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={edificioId || ""} onChange={(e) => setEdificioId(Number(e.target.value))}>
               <option value="">Seleccionar...</option>
               {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm font-medium">Tipo *</label>
-            <select className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={tipoGastoId || ""} onChange={(e) => setTipoGastoId(Number(e.target.value))}>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={tipoGastoId || ""} onChange={(e) => setTipoGastoId(Number(e.target.value))}>
               <option value="">Seleccionar...</option>
-              {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </div>
         </div>
@@ -1438,262 +1920,28 @@ function GastoForm({ open, onClose, edificios, tipos, onSave }: {
           <Input value={form.descripcion || ""} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
         </div>
         <div>
-          <label className="text-sm font-medium">Comprobante (URL o texto)</label>
-          <Input value={form.comprobante || ""} onChange={(e) => setForm({ ...form, comprobante: e.target.value })} />
+          <label className="text-sm font-medium">Comprobante (URL, referencia o texto)</label>
+          <Input
+            placeholder={COMPROBANTE_PENDIENTE}
+            value={form.comprobante || ""}
+            onChange={(e) => setForm({ ...form, comprobante: e.target.value })}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Si se deja vacio o con el valor por defecto "{COMPROBANTE_PENDIENTE}", se considerara pendiente de revision.
+          </p>
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-function TiposCargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
-  const { data, loading, error, reload } = useFetch(() => tiposCargosApi.listar());
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<TipoCargo | null>(null);
-  const [confirm, setConfirm] = useState<{ id: number; nombre: string } | null>(null);
-
-  const handleSave = async (form: Partial<TipoCargo>) => {
-    try {
-      if (editing) {
-        await tiposCargosApi.actualizar(editing.id, form);
-        onToast("Tipo de cargo actualizado", "ok");
-      } else {
-        await tiposCargosApi.crear(form);
-        onToast("Tipo de cargo creado", "ok");
-      }
-      setOpen(false);
-      setEditing(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      await tiposCargosApi.eliminar(id);
-      onToast("Tipo de cargo eliminado", "ok");
-      setConfirm(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  return (
-    <>
-      <TableCard
-        title="Tipos de Cargo"
-        action={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo
-          </Button>
-        }
-      >
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Nombre</th>
-                  <th className="py-3 px-3">Descripcion</th>
-                  <th className="py-3 px-3">Activo</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{t.id}</td>
-                    <td className="py-3 px-3 font-medium">{t.nombre}</td>
-                    <td className="py-3 px-3 text-slate-500">{t.descripcion || "-"}</td>
-                    <td className="py-3 px-3">{t.activo ? "Si" : "No"}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => { setEditing(t); setOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded mr-1">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => setConfirm({ id: t.id, nombre: t.nombre })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {data.length === 0 && (
-                  <tr><td colSpan={5} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </TableCard>
-
-      <TipoCargoForm
-        open={open} onClose={() => { setOpen(false); setEditing(null); }}
-        editing={editing} onSave={handleSave}
-      />
-      <ConfirmDialog
-        open={!!confirm}
-        message={`Eliminar el tipo de cargo "${confirm?.nombre}"?`}
-        onConfirm={() => confirm && handleDelete(confirm.id)}
-        onCancel={() => setConfirm(null)}
-      />
-    </>
-  );
-}
-
-function TipoCargoForm({ open, onClose, editing, onSave }: {
-  open: boolean; onClose: () => void; editing: TipoCargo | null; onSave: (data: Partial<TipoCargo>) => void;
-}) {
-  const [form, setForm] = useState<Partial<TipoCargo>>({});
-  useEffect(() => { setForm(editing || { activo: true }); }, [editing, open]);
-  return (
-    <Modal open={open} onClose={onClose} title={editing ? "Editar Tipo de Cargo" : "Nuevo Tipo de Cargo"} footer={
-      <>
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button onClick={() => onSave(form)}>Guardar</Button>
-      </>
-    }>
-      <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium">Nombre *</label>
-          <Input value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Descripcion</label>
-          <Input value={form.descripcion || ""} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" checked={form.activo ?? true} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
-          <label className="text-sm">Activo</label>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function TiposGastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
-  const { data, loading, error, reload } = useFetch(() => tiposGastosApi.listar());
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<TipoGasto | null>(null);
-  const [confirm, setConfirm] = useState<{ id: number; nombre: string } | null>(null);
-
-  const handleSave = async (form: Partial<TipoGasto>) => {
-    try {
-      if (editing) {
-        await tiposGastosApi.actualizar(editing.id, form);
-        onToast("Tipo de gasto actualizado", "ok");
-      } else {
-        await tiposGastosApi.crear(form);
-        onToast("Tipo de gasto creado", "ok");
-      }
-      setOpen(false);
-      setEditing(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      await tiposGastosApi.eliminar(id);
-      onToast("Tipo de gasto eliminado", "ok");
-      setConfirm(null);
-      reload();
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : "Error", "err");
-    }
-  };
-
-  return (
-    <>
-      <TableCard
-        title="Tipos de Gasto"
-        action={
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />Nuevo
-          </Button>
-        }
-      >
-        <LoadingOrError loading={loading} error={error} onRetry={reload} />
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                  <th className="py-3 px-3">ID</th>
-                  <th className="py-3 px-3">Nombre</th>
-                  <th className="py-3 px-3">Descripcion</th>
-                  <th className="py-3 px-3">Activo</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{t.id}</td>
-                    <td className="py-3 px-3 font-medium">{t.nombre}</td>
-                    <td className="py-3 px-3 text-slate-500">{t.descripcion || "-"}</td>
-                    <td className="py-3 px-3">{t.activo ? "Si" : "No"}</td>
-                    <td className="py-3 px-3 text-right">
-                      <button onClick={() => { setEditing(t); setOpen(true); }} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded mr-1">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => setConfirm({ id: t.id, nombre: t.nombre })} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {data.length === 0 && (
-                  <tr><td colSpan={5} className="py-6 text-center text-slate-500">Sin registros</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </TableCard>
-
-      <TipoGastoForm
-        open={open} onClose={() => { setOpen(false); setEditing(null); }}
-        editing={editing} onSave={handleSave}
-      />
-      <ConfirmDialog
-        open={!!confirm}
-        message={`Eliminar el tipo de gasto "${confirm?.nombre}"?`}
-        onConfirm={() => confirm && handleDelete(confirm.id)}
-        onCancel={() => setConfirm(null)}
-      />
-    </>
-  );
-}
-
-function TipoGastoForm({ open, onClose, editing, onSave }: {
-  open: boolean; onClose: () => void; editing: TipoGasto | null; onSave: (data: Partial<TipoGasto>) => void;
-}) {
-  const [form, setForm] = useState<Partial<TipoGasto>>({});
-  useEffect(() => { setForm(editing || { activo: true }); }, [editing, open]);
-  return (
-    <Modal open={open} onClose={onClose} title={editing ? "Editar Tipo de Gasto" : "Nuevo Tipo de Gasto"} footer={
-      <>
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button onClick={() => onSave(form)}>Guardar</Button>
-      </>
-    }>
-      <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium">Nombre *</label>
-          <Input value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Descripcion</label>
-          <Input value={form.descripcion || ""} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" checked={form.activo ?? true} onChange={(e) => setForm({ ...form, activo: e.target.checked })} />
-          <label className="text-sm">Activo</label>
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <input
+            id="periodicidad"
+            type="checkbox"
+            checked={!!form.periodicidadMensual}
+            onChange={(e) => setForm({ ...form, periodicidadMensual: e.target.checked })}
+            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          />
+          <label htmlFor="periodicidad" className="text-sm">
+            <span className="font-medium">Periodicidad mensual</span>
+            <span className="block text-[11px] text-slate-500">El sistema generara automaticamente los meses futuros.</span>
+          </label>
         </div>
       </div>
     </Modal>
@@ -1726,7 +1974,7 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium">Periodo</label>
-            <select className="w-full px-3 py-2 mt-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            <select className="w-full h-9 px-3 mt-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={period} onChange={(e) => setPeriod(e.target.value)}>
               <option value="current">Mes actual</option>
               <option value="jun-2026">Junio 2026</option>
             </select>

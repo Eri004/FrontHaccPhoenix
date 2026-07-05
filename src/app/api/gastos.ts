@@ -3,6 +3,8 @@ import type { Edificio } from "./edificios";
 import type { TipoGasto } from "./tiposGastos";
 import type { Usuario } from "./auth";
 
+export const COMPROBANTE_PENDIENTE = "PENDIENTE DE CARGA";
+
 export type Gasto = {
   id: number;
   edificio: Edificio;
@@ -12,6 +14,7 @@ export type Gasto = {
   descripcion: string;
   valor: number;
   comprobante: string | null;
+  periodicidadMensual?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -41,4 +44,13 @@ export const gastosApi = {
     api.put<{ mensaje: string; id: number }>(`/gastos/${id}`, data),
   eliminar: (id: number) =>
     api.delete<{ mensaje: string; id: number }>(`/gastos/${id}`),
+  generarMensuales: (data: { mes: number; anio: number }) =>
+    api.post<{ mensaje: string; total: number; gastosCreados: number }>(
+      `/gastos/generar-mensuales`,
+      data
+    ),
 };
+
+export function comprobanteEsPendiente(g: Pick<Gasto, "comprobante">): boolean {
+  return !g.comprobante || g.comprobante.trim() === "" || g.comprobante === COMPROBANTE_PENDIENTE;
+}

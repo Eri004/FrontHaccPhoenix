@@ -2,3 +2,13 @@
 @source '../**/*.{js,ts,jsx,tsx}';
 
 @import 'tw-animate-css';
+
+@layer base {
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
