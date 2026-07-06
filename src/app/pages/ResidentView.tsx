@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard, Building2, Receipt, Banknote, LogOut, Home, Menu, X,
   DollarSign, CheckCircle2, Clock, AlertTriangle, UserCog, Mail, Phone, MapPin,
+  CreditCard, Hash as HashIcon, FileText, Calendar, Wallet,
 } from "lucide-react";
 import { useAuth } from "./AuthContext";
 import {
@@ -11,6 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 
 type ResidentViewProps = { onLogout: () => void };
 
@@ -222,7 +224,7 @@ export default function ResidentView({ onLogout }: ResidentViewProps) {
                   {selected && <DepartamentoDetalle departamento={selected} />}
                 </>
               )}
-              {section === "cargos" && selected && <ResidentCargos departamento={selected} />}
+              {section === "cargos" && selected && <ResidentCargos key={`cargos-${selected.id}`} departamento={selected} />}
               {section === "pagos" && selected && <ResidentPagos departamento={selected} />}
               {section === "perfil" && <ResidentProfile user={user} />}
             </>
@@ -318,60 +320,219 @@ function DepartamentoDetalle({ departamento }: { departamento: Departamento }) {
   );
 }
 
-function ResidentCargos({ departamento }: { departamento: Departamento }) {
+function ResidentCargos({ departamento, onPaid }: { departamento: Departamento; onPaid?: () => void }) {
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  const [paying, setPaying] = useState<Cargo | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "ok" | "err" } | null>(null);
+
+  const load = () => {
     setLoading(true);
     cargosApi.listarPorDepartamento(departamento.id)
       .then(setCargos)
       .catch(() => setCargos([]))
       .finally(() => setLoading(false));
-  }, [departamento.id]);
+  };
+  useEffect(() => { load(); }, [departamento.id]);
+
+  const handlePaid = () => {
+    setPaying(null);
+    load();
+    onPaid?.();
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Receipt className="w-5 h-5" />
-          Cargos del departamento
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <p className="text-center text-slate-500 py-4">Cargando...</p>
-        ) : cargos.length === 0 ? (
-          <p className="text-center text-slate-500 py-4">No hay cargos registrados.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                  <th className="py-3 px-3">Tipo</th>
-                  <th className="py-3 px-3">Descripcion</th>
-                  <th className="py-3 px-3">Generado</th>
-                  <th className="py-3 px-3">Vence</th>
-                  <th className="py-3 px-3">Valor</th>
-                  <th className="py-3 px-3">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cargos.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="py-3 px-3">{c.tipoCargo?.nombre}</td>
-                    <td className="py-3 px-3">{c.descripcion || "-"}</td>
-                    <td className="py-3 px-3">{formatDate(c.fechaGeneracion)}</td>
-                    <td className="py-3 px-3">{formatDate(c.fechaVencimiento)}</td>
-                    <td className="py-3 px-3 font-medium">{formatMoney(c.valor)}</td>
-                    <td className="py-3 px-3"><StatusBadge estado={c.estado} /></td>
+    <>
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm ${
+          toast.type === "ok" ? "bg-green-600 text-white" : "bg-red-600 text-white"
+        }`}>
+          {toast.type === "ok" ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+          {toast.message}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Receipt className="w-5 h-5" />
+            Cargos del departamento
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-center text-slate-500 py-4">Cargando...</p>
+          ) : cargos.length === 0 ? (
+            <p className="text-center text-slate-500 py-4">No hay cargos registrados.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <th className="py-3 px-3">Tipo</th>
+                    <th className="py-3 px-3">Descripcion</th>
+                    <th className="py-3 px-3">Generado</th>
+                    <th className="py-3 px-3">Vence</th>
+                    <th className="py-3 px-3">Valor</th>
+                    <th className="py-3 px-3">Estado</th>
+                    <th className="py-3 px-3 text-right">Accion</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cargos.map((c) => (
+                    <tr key={c.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="py-3 px-3">{c.tipoCargo?.nombre}</td>
+                      <td className="py-3 px-3">{c.descripcion || "-"}</td>
+                      <td className="py-3 px-3">{formatDate(c.fechaGeneracion)}</td>
+                      <td className="py-3 px-3">{formatDate(c.fechaVencimiento)}</td>
+                      <td className="py-3 px-3 font-medium">{formatMoney(c.valor)}</td>
+                      <td className="py-3 px-3"><StatusBadge estado={c.estado} /></td>
+                      <td className="py-3 px-3 text-right">
+                        {c.estado !== "PAGADO" && c.estado !== "ANULADO" ? (
+                          <Button size="sm" onClick={() => setPaying(c)} className="h-7 px-2 text-xs bg-green-600 hover:bg-green-700">
+                            <CreditCard className="w-3 h-3 mr-1" />Pagar
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-green-600 font-medium">Pagado</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {paying && (
+        <ResidentPagoForm
+          cargo={paying}
+          onClose={() => setPaying(null)}
+          onSaved={() => {
+            setToast({ message: "Pago registrado correctamente", type: "ok" });
+            setTimeout(() => setToast(null), 3500);
+            handlePaid();
+          }}
+          onError={(m) => {
+            setToast({ message: m, type: "err" });
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ResidentPagoForm({ cargo, onClose, onSaved, onError }: {
+  cargo: Cargo; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
+}) {
+  const [form, setForm] = useState<Partial<Pago>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      fecha: new Date().toISOString().substring(0, 10),
+      montoTotal: cargo.valor,
+      metodoPago: "TRANSFERENCIA",
+      numeroComprobante: "",
+      pagadoPor: "",
+      observaciones: "",
+    });
+  }, [cargo.id]);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      await pagosApi.crear(cargo.departamento.id, null, {
+        pago: { ...form, fecha: form.fecha || new Date().toISOString().substring(0, 10) },
+        cargosIds: [cargo.id],
+      });
+      onSaved();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Error al registrar pago");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-700">
+        <div className="flex justify-between items-center p-5 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">Registrar pago</h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-500">Cargo a pagar</p>
+            <p className="font-medium text-slate-900 dark:text-white">
+              {cargo.tipoCargo?.nombre} - {cargo.departamento?.identificadorCompleto}
+            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+              Valor: <span className="font-semibold text-slate-900 dark:text-white">{formatMoney(cargo.valor)}</span>
+            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Fecha *</label>
+              <Input type="date" value={form.fecha || ""} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" />Monto *</label>
+              <Input type="number" step="0.01" value={form.montoTotal ?? 0} onChange={(e) => setForm({ ...form, montoTotal: e.target.value ? Number(e.target.value) : 0 })} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium flex items-center gap-1"><Wallet className="w-3.5 h-3.5" />Metodo de pago</label>
+              <select
+                className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                value={form.metodoPago || "TRANSFERENCIA"}
+                onChange={(e) => setForm({ ...form, metodoPago: e.target.value })}
+              >
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="EFECTIVO">Efectivo</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="TARJETA">Tarjeta</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium flex items-center gap-1"><HashIcon className="w-3.5 h-3.5" />Nro. comprobante</label>
+              <Input value={form.numeroComprobante || ""} onChange={(e) => setForm({ ...form, numeroComprobante: e.target.value })} placeholder="Opcional" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium flex items-center gap-1"><UserCog className="w-3.5 h-3.5" />Pagado por</label>
+            <Input value={form.pagadoPor || ""} onChange={(e) => setForm({ ...form, pagadoPor: e.target.value })} placeholder="Tu nombre" />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium flex items-center gap-1"><FileText className="w-3.5 h-3.5" />Observaciones</label>
+            <Input value={form.observaciones || ""} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} placeholder="Opcional" />
+          </div>
+
+          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-200">
+            Al confirmar, el cargo quedara marcado como <strong>PAGADO</strong> y el pago sera visible inmediatamente para el administrador.
+          </div>
+        </div>
+
+        <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex gap-3 justify-end bg-slate-50 dark:bg-slate-900/50 rounded-b-2xl">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
+          <Button onClick={submit} disabled={submitting} className="bg-green-600 hover:bg-green-700">
+            <CheckCircle2 className="w-4 h-4 mr-2" />
+            {submitting ? "Registrando..." : "Confirmar pago"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
