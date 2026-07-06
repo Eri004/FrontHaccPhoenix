@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Building2, CreditCard, Receipt, Wallet,
   Settings, LogOut, Plus, Edit2, Trash2, Search, Download,
@@ -244,11 +244,13 @@ function useFetch<T>(fetcher: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetcher();
+      const r = await fetcherRef.current();
       setData(r);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al cargar";
@@ -256,7 +258,7 @@ function useFetch<T>(fetcher: () => Promise<T>) {
     } finally {
       setLoading(false);
     }
-  }, [fetcher]);
+  }, []);
   useEffect(() => { load(); }, [load]);
   return { data, loading, error, reload: load, setData };
 }
