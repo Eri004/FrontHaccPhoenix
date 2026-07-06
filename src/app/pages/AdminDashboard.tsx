@@ -267,7 +267,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </div>
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <NotificationBell onNavigate={(s) => setSection(s as Section)} />
-            <div className="hidden md:block text-xs md:text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+            <div className="hidden md:block text-xs md:text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0 pr-12">
               {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </div>
           </div>
@@ -1610,7 +1610,7 @@ function PagoForm({ open, cargo, onClose, onSaved, onError }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium">Fecha *</label>
+              <label className="text-sm font-medium ">Fecha *</label>
               <Input type="date" value={form.fecha || ""} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
             </div>
             <div>
