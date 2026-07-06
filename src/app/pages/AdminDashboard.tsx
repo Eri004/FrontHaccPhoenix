@@ -254,9 +254,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-base md:text-xl font-bold text-slate-900 dark:text-white truncate">
-              {currentSection?.label}
-            </h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base md:text-xl font-bold text-slate-900 dark:text-white truncate">
+                {currentSection?.label}
+              </h1>
+              {currentSubtitle && (
+                <p className="text-xs md:text-sm font-normal text-slate-500 dark:text-slate-400 truncate">
+                  {currentSubtitle}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <NotificationBell onNavigate={(s) => setSection(s as Section)} />
@@ -306,17 +313,10 @@ function useFetch<T>(fetcher: () => Promise<T>) {
 }
 
 function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  if (!action) return null;
   return (
-    <div className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 mb-4">
-      <div className="min-w-0 flex-1">
-        <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
-        {subtitle && <p className="text-sm font-normal text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
-      </div>
-      {action && (
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:shrink-0 md:ml-4 md:justify-end">
-          {action}
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-2 mb-4">
+      {action}
     </div>
   );
 }
@@ -760,8 +760,8 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
   return (
     <div className="space-y-4">
       <SectionHeader
-        title="Departamentos"
-        subtitle="Gestiona los departamentos por edificio y consulta su informacion"
+         
+        
         action={
           <>
             <div className="relative">
