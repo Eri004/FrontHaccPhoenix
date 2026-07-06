@@ -7,6 +7,7 @@ export type Edificio = {
   numeroPisos: number | null;
   descripcion: string | null;
   estado: string;
+  imagen?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };

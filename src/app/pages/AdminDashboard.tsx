@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, Banknote, FileText,
   BarChart3, Home, UserCog, IdCard, Menu, X, RefreshCw, CheckCircle2,
   AlertTriangle, Clock, Mail, Phone, MapPin, Filter, Calendar,
-  ChevronRight, ArrowLeft, Layers, Hash, Square,
+  ChevronRight, ArrowLeft, Layers, Hash, Square, Upload, ImageIcon,
   Hash as HashIcon,
 } from "lucide-react";
 import {
@@ -15,7 +15,7 @@ import {
 import { useAuth } from "./AuthContext";
 import {
   edificiosApi, departamentosApi, propietariosApi,
-  cargosApi, pagosApi, gastosApi, tiposCargosApi,
+  cargosApi, pagosApi, gastosApi, tiposCargosApi, reportesApi,
   type Edificio, type Departamento, type Propietario, type Inquilino,
   type Cargo, type Pago, type Gasto, type EstadoCargo, type TipoCargo,
   COMPROBANTE_PENDIENTE, comprobanteEsPendiente,
@@ -53,6 +53,18 @@ const NAV: { id: Section; label: string; icon: any; group: string }[] = [
   { id: "reportes", label: "Reportes", icon: BarChart3, group: "Otros" },
   { id: "settings", label: "Ajustes", icon: Settings, group: "Otros" },
 ];
+
+const SECTION_SUBTITLES: Record<Section, string> = {
+  dashboard: "Resumen general del condominio",
+  edificios: "Vista general de los edificios administrados",
+  departamentos: "Departamentos por edificio con su detalle",
+  propietarios: "Consulta los propietarios y los departamentos que administran",
+  cargos: "Gestiona los cargos aplicados a los departamentos",
+  pagos: "Historial de pagos realizados",
+  gastos: "Control de gastos y comprobantes del condominio",
+  reportes: "Genera y descarga reportes financieros",
+  settings: "Perfil de usuario y preferencias",
+};
 
 const CHART_COLORS = ["#2563EB", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#06B6D4"];
 
@@ -149,6 +161,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const showToast = (message: string, type: "ok" | "err") => setToast({ message, type });
 
+  const currentSection = NAV.find((n) => n.id === section);
+  const currentSubtitle = SECTION_SUBTITLES[section];
+
   return (
     <div className="h-screen w-screen bg-slate-100 dark:bg-slate-950 flex overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -160,7 +175,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         />
       )}
 
-      <aside className={`${sidebarOpen ? "w-64" : "w-20"} ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:static inset-y-0 left-0 z-40 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col h-full`}>
+      <aside className={`${sidebarOpen ? "w-64" : "w-20"} ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:relative md:transform-none inset-y-0 left-0 z-40 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col h-full`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           {sidebarOpen ? (
             <div className="flex items-center gap-2 min-w-0">
@@ -239,24 +254,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="min-w-0">
-              <h1 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white truncate">
-                {NAV.find((n) => n.id === section)?.label}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-base md:text-xl font-bold text-slate-900 dark:text-white truncate">
+                {currentSubtitle || currentSection?.label}
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
-                Panel de administracion del condominio
-              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <NotificationBell onNavigate={(s) => setSection(s as Section)} />
-            <div className="hidden lg:block text-sm text-slate-500 dark:text-slate-400">
-              {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            <div className="hidden md:block text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+              {new Date().toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", year: "numeric" })}
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 bg-slate-50 dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-slate-50 dark:bg-slate-950">
           {section === "dashboard" && <DashboardSection />}
           {section === "edificios" && <EdificiosSection onToast={showToast} />}
           {section === "departamentos" && <DepartamentosSection onToast={showToast} />}
@@ -297,13 +309,13 @@ function useFetch<T>(fetcher: () => Promise<T>) {
 
 function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-      <div className="min-w-0">
+    <div className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 mb-4">
+      <div className="min-w-0 flex-1">
         <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
         {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
       {action && (
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:shrink-0">
           {action}
         </div>
       )}
@@ -499,7 +511,7 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
     <div className="space-y-4">
       <SectionHeader
         title="Edificios"
-        subtitle="Vista general de los edificios administrados"
+
         action={
           <>
             <div className="relative">
@@ -530,7 +542,7 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
             {filtered.map((e) => (
               <Card key={e.id} className="overflow-hidden group hover:shadow-xl transition-all border-slate-200 dark:border-slate-800">
                 <div className="relative aspect-[4/3] overflow-hidden bg-slate-200 dark:bg-slate-800">
-                  <EdificioImage nombre={e.nombre} id={e.id} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <EdificioImage nombre={e.nombre} id={e.id} imagen={e.imagen} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                   <div className="absolute top-3 left-3">
                     <Badge className={e.estado === "ACTIVO" ? "bg-green-500 text-white" : "bg-slate-500 text-white"}>
@@ -597,6 +609,23 @@ function EdificioForm({ open, onClose, editing, onSave }: {
 }) {
   const [form, setForm] = useState<Partial<Edificio>>({});
   useEffect(() => { setForm(editing || { estado: "ACTIVO" }); }, [editing, open]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert("La imagen no puede pesar mas de 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm({ ...form, imagen: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => setForm({ ...form, imagen: null });
+
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Editar Edificio" : "Nuevo Edificio"} footer={
       <>
@@ -629,6 +658,32 @@ function EdificioForm({ open, onClose, editing, onSave }: {
         <div>
           <label className="text-sm font-medium">Descripcion</label>
           <Input value={form.descripcion || ""} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Imagen del edificio (opcional)</label>
+          <div className="mt-1 flex items-start gap-3">
+            <div className="w-24 h-24 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+              {form.imagen ? (
+                <img src={form.imagen} alt="preview" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon className="w-8 h-8 text-slate-300" />
+              )}
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                <Upload className="w-3.5 h-3.5" />
+                {form.imagen ? "Cambiar imagen" : "Subir imagen"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+              </label>
+              {form.imagen && (
+                <button type="button" onClick={removeImage} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                  Quitar imagen
+                </button>
+              )}
+              <p className="text-[11px] text-slate-500">JPG, PNG o WebP. Max 2MB. Si no subes ninguna, se usara una imagen por defecto.</p>
+            </div>
+          </div>
         </div>
       </div>
     </Modal>
@@ -708,7 +763,7 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
     <div className="space-y-4">
       <SectionHeader
         title="Departamentos"
-        subtitle="Gestiona los departamentos por edificio y consulta su informacion"
+
         action={
           <>
             <div className="relative">
@@ -1110,7 +1165,7 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
     <div className="space-y-4">
       <SectionHeader
         title="Propietarios"
-        subtitle="Consulta los propietarios y los departamentos que administran"
+
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
@@ -1309,7 +1364,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     <div className="space-y-4">
       <SectionHeader
         title="Cargos"
-        subtitle="Gestiona los cargos aplicados a los departamentos"
+
         action={
           <>
             <Button variant="outline" onClick={handleGenerarAlicuotas} disabled={generating} className="whitespace-nowrap">
@@ -1629,7 +1684,7 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
     <div className="space-y-4">
       <SectionHeader
         title="Pagos"
-        subtitle="Historial de pagos realizados"
+
       />
 
       <Card>
@@ -1790,7 +1845,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     <div className="space-y-4">
       <SectionHeader
         title="Gastos"
-        subtitle="Control de gastos y comprobantes del condominio"
+
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={handleGenerarMensuales} disabled={generating}>

@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Building2 } from "lucide-react";
 
-const FALLBACK =
-  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODgiIGhlaWdodD0iODgiIHhtbG5sPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBvcGFjaXR5PSIuMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzLjciPjxyZWN0IHg9IjE2IiB5PSIxNiIgd2lkdGg9IjU2IiBoZWlnaHQ9IjU2IiByeD0iNiIvPjxwYXRoIGQ9Im0xNiA1OCAxNi0xOCAzMiAzMiIvPjxjaXJjbGUgY3g9IjUzIiBjeT0iMzUiIHI9IjciLz48L3N2Zz4KCg==";
-
 function hashStringToInt(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
@@ -18,11 +15,24 @@ function buildingImageUrl(nombre: string, id: number): string {
 type Props = {
   nombre: string;
   id: number;
+  imagen?: string | null;
   className?: string;
 };
 
-export default function EdificioImage({ nombre, id, className }: Props) {
+export default function EdificioImage({ nombre, id, imagen, className }: Props) {
   const [errored, setErrored] = useState(false);
+
+  if (imagen && imagen.trim() && !errored) {
+    return (
+      <img
+        src={imagen}
+        alt={nombre}
+        className={className}
+        onError={() => setErrored(true)}
+      />
+    );
+  }
+
   if (errored) {
     return (
       <div className={`relative w-full h-full bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 flex items-center justify-center ${className || ""}`}>
@@ -31,16 +41,13 @@ export default function EdificioImage({ nombre, id, className }: Props) {
       </div>
     );
   }
+
   return (
     <img
       src={buildingImageUrl(nombre, id)}
       alt={nombre}
       className={className}
-      onError={() => {
-        if (!errored) {
-          setErrored(true);
-        }
-      }}
+      onError={() => setErrored(true)}
     />
   );
 }
