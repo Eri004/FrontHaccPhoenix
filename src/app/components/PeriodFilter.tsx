@@ -73,10 +73,10 @@ export default function PeriodFilter({ value, onChange }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-sm">
+      <div className="inline-flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-sm">
         <button
           onClick={() => onChange({ mode: "current" })}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+          className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
             value.mode === "current"
               ? "bg-blue-600 text-white shadow"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -86,7 +86,7 @@ export default function PeriodFilter({ value, onChange }: Props) {
         </button>
         <button
           onClick={() => onChange({ mode: "all" })}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+          className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
             value.mode === "all"
               ? "bg-blue-600 text-white shadow"
               : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -97,14 +97,15 @@ export default function PeriodFilter({ value, onChange }: Props) {
         <div className="relative">
           <button
             onClick={() => setOpen((o) => !o)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+            className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap ${
               value.mode === "month"
                 ? "bg-blue-600 text-white shadow"
                 : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
-            Mes especifico
+            <span className="hidden sm:inline">Mes especifico</span>
+            <span className="sm:hidden">Mes</span>
             <ChevronDown className="w-3 h-3" />
           </button>
           {open && (
@@ -157,9 +158,9 @@ export default function PeriodFilter({ value, onChange }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-        <Filter className="w-3.5 h-3.5 text-slate-500" />
-        <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+        <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+        <span className="text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
           {periodLabel(value)}
         </span>
       </div>

@@ -144,6 +144,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const { user } = useAuth();
   const [section, setSection] = useState<Section>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "ok" | "err" } | null>(null);
 
   const showToast = (message: string, type: "ok" | "err") => setToast({ message, type });
@@ -152,19 +153,42 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     <div className="h-screen w-screen bg-slate-100 dark:bg-slate-950 flex overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <aside className={`${sidebarOpen ? "w-64" : "w-20"} shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col h-full`}>
+      {mobileSidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`${sidebarOpen ? "w-64" : "w-20"} ${mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:static inset-y-0 left-0 z-40 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all flex flex-col h-full`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
-          {sidebarOpen && (
+          {sidebarOpen ? (
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <span className="font-bold text-slate-900 dark:text-white truncate">HACCPHOENIX</span>
             </div>
+          ) : (
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+              <Building2 className="w-5 h-5 text-white" />
+            </div>
           )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0">
-            {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setSidebarOpen(!sidebarOpen); setMobileSidebarOpen(false); }}
+              className="hidden md:flex p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0"
+              title={sidebarOpen ? "Colapsar" : "Expandir"}
+            >
+              {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setMobileSidebarOpen(false)}
+              className="md:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto min-h-0">
@@ -174,7 +198,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             return (
               <button
                 key={item.id}
-                onClick={() => setSection(item.id)}
+                onClick={() => { setSection(item.id); setMobileSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   active
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
@@ -207,24 +231,32 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white truncate">
-              {NAV.find((n) => n.id === section)?.label}
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
-              Panel de administracion del condominio
-            </p>
+        <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-2xl font-bold text-slate-900 dark:text-white truncate">
+                {NAV.find((n) => n.id === section)?.label}
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
+                Panel de administracion del condominio
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 md:gap-4 shrink-0">
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <NotificationBell onNavigate={(s) => setSection(s as Section)} />
-            <div className="hidden md:block text-sm text-slate-500 dark:text-slate-400">
+            <div className="hidden lg:block text-sm text-slate-500 dark:text-slate-400">
               {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 bg-slate-50 dark:bg-slate-950">
           {section === "dashboard" && <DashboardSection />}
           {section === "edificios" && <EdificiosSection onToast={showToast} />}
           {section === "departamentos" && <DepartamentosSection onToast={showToast} />}
@@ -266,11 +298,15 @@ function useFetch<T>(fetcher: () => Promise<T>) {
 function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-      <div>
+      <div className="min-w-0">
         <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
         {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
-      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
+      {action && (
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -1224,12 +1260,43 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     const now = new Date();
     setGenerating(true);
     try {
-      const result = await cargosApi.generarAlicuotas({
-        mes: now.getMonth() + 1,
-        anio: now.getFullYear(),
-        fechaVencimiento: null,
-      });
-      onToast(`Alicuotas generadas: ${result.cargosCreados} cargos`, "ok");
+      const depts = (departamentosData || []) as Departamento[];
+      const tipos = (tiposData as TipoCargo[]) || [];
+      const tipoAlicuota =
+        tipos.find((t) => /alicuota|al[ií]cuota/i.test(t.nombre)) || tipos[0];
+
+      if (!tipoAlicuota) {
+        onToast("No hay tipos de cargo configurados. Crea al menos uno antes de generar alicuotas.", "err");
+        return;
+      }
+      if (depts.length === 0) {
+        onToast("No hay departamentos registrados.", "err");
+        return;
+      }
+
+      const fechaGen = now.toISOString().substring(0, 10);
+      const vencimiento = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toISOString().substring(0, 10);
+
+      let ok = 0;
+      let fallidos = 0;
+      for (const d of depts) {
+        const alicuota = Number(d.alicuota) || 0;
+        if (alicuota <= 0) { fallidos++; continue; }
+        try {
+          await cargosApi.crear(d.id, tipoAlicuota.id, null, {
+            valor: alicuota,
+            estado: "PENDIENTE",
+            fechaGeneracion: fechaGen,
+            fechaVencimiento: vencimiento,
+            descripcion: `Alicuota ${now.toLocaleDateString("es-EC", { month: "long", year: "numeric" })}`,
+          });
+          ok++;
+        } catch {
+          fallidos++;
+        }
+      }
+      onToast(`Alicuotas generadas: ${ok} creadas${fallidos > 0 ? `, ${fallidos} omitidas` : ""}`, "ok");
       reload();
     } catch (e) {
       onToast(e instanceof Error ? e.message : "Error al generar alicuotas", "err");
@@ -1244,15 +1311,18 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
         title="Cargos"
         subtitle="Gestiona los cargos aplicados a los departamentos"
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={handleGenerarAlicuotas} disabled={generating}>
-              <Receipt className="w-4 h-4 mr-2" />
-              {generating ? "Generando..." : "Generar Alicuotas del Mes"}
+          <>
+            <Button variant="outline" onClick={handleGenerarAlicuotas} disabled={generating} className="whitespace-nowrap">
+              <Receipt className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">{generating ? "Generando..." : "Generar Alicuotas"}</span>
+              <span className="md:hidden">Alicuotas</span>
             </Button>
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />Nuevo cargo
+            <Button onClick={() => setOpen(true)} className="whitespace-nowrap">
+              <Plus className="w-4 h-4 md:mr-2" />
+              <span className="hidden sm:inline">Nuevo cargo</span>
+              <span className="sm:hidden">Nuevo</span>
             </Button>
-          </div>
+          </>
         }
       />
 
