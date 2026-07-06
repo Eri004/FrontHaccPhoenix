@@ -246,7 +246,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3">
+        <header className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 pl-2 pr-3 md:pl-3 md:pr-4 py-3 md:py-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <button
               onClick={() => setMobileSidebarOpen(true)}
@@ -254,21 +254,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-base md:text-xl font-bold text-slate-900 dark:text-white truncate">
-                {currentSubtitle || currentSection?.label}
-              </h1>
-            </div>
+            <h1 className="text-base md:text-xl font-bold text-slate-900 dark:text-white truncate">
+              {currentSection?.label}
+            </h1>
           </div>
           <div className="flex items-center gap-2 md:gap-3 shrink-0">
             <NotificationBell onNavigate={(s) => setSection(s as Section)} />
-            <div className="hidden md:block text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
-              {new Date().toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", year: "numeric" })}
+            <div className="hidden md:block text-xs md:text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+              {new Date().toLocaleDateString("es-EC", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-slate-50 dark:bg-slate-950">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 md:px-4 md:py-5 bg-slate-50 dark:bg-slate-950">
           {section === "dashboard" && <DashboardSection />}
           {section === "edificios" && <EdificiosSection onToast={showToast} />}
           {section === "departamentos" && <DepartamentosSection onToast={showToast} />}
@@ -312,10 +310,10 @@ function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: 
     <div className="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 mb-4">
       <div className="min-w-0 flex-1">
         <h2 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-sm font-normal text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
       </div>
       {action && (
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:shrink-0 md:ml-4 md:justify-end">
           {action}
         </div>
       )}
@@ -384,7 +382,7 @@ function DashboardSection() {
           const Icon = s.icon;
           return (
             <Card key={s.label} className="overflow-hidden border-slate-200 dark:border-slate-800">
-              <CardContent className="p-4 md:p-5">
+              <CardContent className="p-3 md:p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.color} flex items-center justify-center shadow-lg`}>
                     <Icon className="w-5 h-5 text-white" />
@@ -511,7 +509,7 @@ function EdificiosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =
     <div className="space-y-4">
       <SectionHeader
         title="Edificios"
-
+        subtitle="Vista general de los edificios administrados"
         action={
           <>
             <div className="relative">
@@ -763,7 +761,7 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
     <div className="space-y-4">
       <SectionHeader
         title="Departamentos"
-
+        subtitle="Gestiona los departamentos por edificio y consulta su informacion"
         action={
           <>
             <div className="relative">
@@ -1165,7 +1163,7 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
     <div className="space-y-4">
       <SectionHeader
         title="Propietarios"
-
+        subtitle="Consulta los propietarios y los departamentos que administran"
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
@@ -1364,7 +1362,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     <div className="space-y-4">
       <SectionHeader
         title="Cargos"
-
+        subtitle="Gestiona los cargos aplicados a los departamentos"
         action={
           <>
             <Button variant="outline" onClick={handleGenerarAlicuotas} disabled={generating} className="whitespace-nowrap">
@@ -1388,7 +1386,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Total Cargos ({periodLabel(period)})</p>
@@ -1399,7 +1397,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
             </div>
           </div>
         </CardContent></Card>
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Cobrado</p>
@@ -1410,7 +1408,7 @@ function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
             </div>
           </div>
         </CardContent></Card>
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Pendiente</p>
@@ -1684,7 +1682,7 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
     <div className="space-y-4">
       <SectionHeader
         title="Pagos"
-
+        subtitle="Historial de pagos realizados"
       />
 
       <Card>
@@ -1694,7 +1692,7 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Total Pagos ({periodLabel(period)})</p>
@@ -1705,7 +1703,7 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
             </div>
           </div>
         </CardContent></Card>
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Cantidad de pagos</p>
@@ -1845,7 +1843,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
     <div className="space-y-4">
       <SectionHeader
         title="Gastos"
-
+        subtitle="Control de gastos y comprobantes del condominio"
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={handleGenerarMensuales} disabled={generating}>
@@ -1866,7 +1864,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Total Gastos ({periodLabel(period)})</p>
@@ -1877,7 +1875,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
             </div>
           </div>
         </CardContent></Card>
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Comprobantes pendientes</p>
@@ -1888,7 +1886,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
             </div>
           </div>
         </CardContent></Card>
-        <Card><CardContent className="p-4 md:p-5">
+        <Card><CardContent className="p-3 md:p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500">Cantidad de gastos</p>
