@@ -4,6 +4,7 @@ export type ReportRequest = {
   type: string;
   period: string;
   format: "pdf" | "excel";
+  edificioId?: number | null;
 };
 
 export const reportesApi = {

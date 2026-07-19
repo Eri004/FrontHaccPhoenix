@@ -2072,12 +2072,25 @@ function GastoForm({ open, onClose, edificios, tipos, editing, onSave }: {
 
 function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const [period, setPeriod] = useState("current");
+  const [edificioId, setEdificioId] = useState<string>("");
+  const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    edificiosApi.listarActivos()
+      .then((data) => setEdificios(Array.isArray(data) ? data : []))
+      .catch(() => setEdificios([]));
+  }, []);
 
   const handleDownload = async (format: "pdf" | "excel") => {
     setLoading(true);
     try {
-      const blob = await reportesApi.generar({ type: "financial", period, format });
+      const blob = await reportesApi.generar({
+        type: "financial",
+        period,
+        format,
+        edificioId: edificioId ? Number(edificioId) : null,
+      });
       reportesApi.descargarReporte(blob, format);
       onToast("Reporte generado", "ok");
     } catch (e) {
@@ -2094,6 +2107,19 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
           <CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" />Reporte Financiero</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Edificio</label>
+            <select
+              className="w-full px-3 py-2 mt-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              value={edificioId}
+              onChange={(e) => setEdificioId(e.target.value)}
+            >
+              <option value="">Todos los edificios</option>
+              {edificios.map((e) => (
+                <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="text-sm font-medium">Periodo</label>
             <select className="w-full h-9 px-3 mt-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={period} onChange={(e) => setPeriod(e.target.value)}>
@@ -2119,7 +2145,10 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            El reporte incluye el detalle de pagos realizados en el periodo seleccionado, con totales y desglose por departamento y metodo de pago.
+            El reporte incluye el detalle de pagos realizados en el periodo y edificio seleccionados,
+            con totales y desglose por departamento y metodo de pago. Adicionalmente, se incluye una
+            seccion con el detalle completo de los residentes (propietarios e inquilinos):
+            cedula, nombre, telefono, correo y estado.
           </p>
         </CardContent>
       </Card>
