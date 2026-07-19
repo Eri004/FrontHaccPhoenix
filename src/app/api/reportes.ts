@@ -1,10 +1,11 @@
-import { API_URL, apiRequest } from "./client";
+import { API_URL } from "./client";
 
 export type ReportRequest = {
   type: string;
   period: string;
   format: "pdf" | "excel";
   edificioId?: number | null;
+  edificioIds?: number[] | null;
 };
 
 export const reportesApi = {

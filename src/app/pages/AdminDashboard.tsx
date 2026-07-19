@@ -2757,7 +2757,7 @@ function GastoForm({ open, onClose, edificios, tipos, editing, onSave }: {
 
 function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const [period, setPeriod] = useState("current");
-  const [edificioId, setEdificioId] = useState<string>("");
+  const [edificioIds, setEdificioIds] = useState<number[]>([]);
   const [edificios, setEdificios] = useState<Edificio[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -2767,6 +2767,10 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
       .catch(() => setEdificios([]));
   }, []);
 
+  const toggleEdificio = (id: number) => {
+    setEdificioIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
   const handleDownload = async (format: "pdf" | "excel") => {
     setLoading(true);
     try {
@@ -2774,7 +2778,7 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
         type: "financial",
         period,
         format,
-        edificioId: edificioId ? Number(edificioId) : null,
+        edificioIds: edificioIds.length > 0 ? edificioIds : null,
       });
       reportesApi.descargarReporte(blob, format);
       onToast("Reporte generado", "ok");
@@ -2793,17 +2797,42 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-sm font-medium">Edificio</label>
-            <select
-              className="w-full px-3 py-2 mt-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-              value={edificioId}
-              onChange={(e) => setEdificioId(e.target.value)}
-            >
-              <option value="">Todos los edificios</option>
-              {edificios.map((e) => (
-                <option key={e.id} value={e.id}>{e.nombre}</option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium">Edificios (seleccion multiple)</label>
+              {edificioIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setEdificioIds([])}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+            <div className="border border-slate-300 dark:border-slate-700 rounded-lg p-2 max-h-40 overflow-y-auto bg-white dark:bg-slate-800 space-y-1">
+              {edificios.length === 0 ? (
+                <p className="text-xs text-slate-500 px-2 py-1">Sin edificios disponibles</p>
+              ) : (
+                <>
+                  {edificioIds.length === 0 && (
+                    <p className="text-[11px] text-slate-500 px-2 py-1 italic">
+                      Sin seleccion = todos los edificios
+                    </p>
+                  )}
+                  {edificios.map((e) => (
+                    <label key={e.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={edificioIds.includes(e.id)}
+                        onChange={() => toggleEdificio(e.id)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm">{e.nombre}</span>
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium">Periodo</label>
@@ -2828,13 +2857,18 @@ function ReportesSection({ onToast }: { onToast: (m: string, t: "ok" | "err") =>
         <CardHeader>
           <CardTitle>Informacion</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            El reporte incluye el detalle de pagos realizados en el periodo y edificio seleccionados,
-            con totales y desglose por departamento y metodo de pago. Adicionalmente, se incluye una
-            seccion con el detalle completo de los residentes (propietarios e inquilinos):
-            cedula, nombre, telefono, correo y estado.
+        <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+          <p>
+            El reporte incluye el detalle de pagos, estado de cuotas por departamento
+            (Pagado / Parcial / Pendiente / Sin cargos) y residentes del periodo seleccionado.
           </p>
+          <ul className="list-disc list-inside text-xs space-y-1">
+            <li>Tarjeta resumen: total recaudado, deptos pagados/pendientes, inquilinos activos/inactivos.</li>
+            <li>Detalle de pagos del periodo con propietario, monto y metodo.</li>
+            <li>Estado de cuotas por departamento: cargos pagados/pendientes, monto y estado del inquilino.</li>
+            <li>Listado completo de residentes con cedula, telefono, correo y estado.</li>
+          </ul>
+          <p className="text-xs">Si no seleccionas edificios se incluyen todos los del condominio.</p>
         </CardContent>
       </Card>
     </div>
