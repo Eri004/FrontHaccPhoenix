@@ -15,9 +15,9 @@ import {
 import { useAuth } from "./AuthContext";
 import {
   edificiosApi, departamentosApi, propietariosApi,
-  cargosApi, pagosApi, gastosApi, tiposCargosApi, reportesApi,
+  cargosApi, pagosApi, gastosApi, tiposCargosApi, tiposGastosApi, reportesApi,
   type Edificio, type Departamento, type Propietario, type Inquilino,
-  type Cargo, type Pago, type Gasto, type EstadoCargo, type TipoCargo,
+  type Cargo, type Pago, type Gasto, type EstadoCargo, type TipoCargo, type TipoGasto,
   COMPROBANTE_PENDIENTE, comprobanteEsPendiente,
   inquilinosApi,
 } from "../api";
@@ -1776,6 +1776,7 @@ function PagosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => vo
 function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const { data, loading, error, reload } = useFetch(() => gastosApi.listar());
   const { data: edificiosData } = useFetch(() => edificiosApi.listar());
+  const { data: tiposData } = useFetch(() => tiposGastosApi.listarActivos());
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Gasto | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; descripcion: string } | null>(null);
@@ -1966,7 +1967,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
 
       <GastoForm
         open={open} onClose={() => { setOpen(false); setEditing(null); }}
-        edificios={edificiosData?.edificios || []} tipos={[]} editing={editing} onSave={handleSave}
+        edificios={edificiosData?.edificios || []} tipos={tiposData || []} editing={editing} onSave={handleSave}
       />
       <ConfirmDialog
         open={!!confirm}
@@ -1980,7 +1981,7 @@ function GastosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => v
 
 function GastoForm({ open, onClose, edificios, tipos, editing, onSave }: {
   open: boolean; onClose: () => void;
-  edificios: Edificio[]; tipos: any[]; editing: Gasto | null;
+  edificios: Edificio[]; tipos: TipoGasto[]; editing: Gasto | null;
   onSave: (edificioId: number, tipoGastoId: number, data: Partial<Gasto>) => void;
 }) {
   const [form, setForm] = useState<Partial<Gasto>>({});
