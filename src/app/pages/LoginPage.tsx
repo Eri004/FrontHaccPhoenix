@@ -83,7 +83,7 @@ Value: https://backendhacc-production.up.railway.app`}
               <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mb-4 shadow-lg overflow-hidden">
                 <img src="/hacc-icon.png" alt="HACC" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">HACCPHOENIX</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">HACC</h1>
               <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">
                 Plataforma de gestion residencial
               </p>

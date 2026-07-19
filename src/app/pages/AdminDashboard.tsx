@@ -180,7 +180,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           {sidebarOpen ? (
             <div className="flex items-center gap-2 min-w-0">
               <img src="/hacc-icon.png" alt="HACC" className="w-9 h-9 rounded-xl object-cover shrink-0" />
-              <span className="font-bold text-slate-900 dark:text-white truncate">HACCPHOENIX</span>
+              <span className="font-bold text-slate-900 dark:text-white truncate">HACC</span>
             </div>
           ) : (
             <img src="/hacc-icon.png" alt="HACC" className="w-9 h-9 rounded-xl object-cover shrink-0" />
