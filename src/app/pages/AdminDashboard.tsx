@@ -636,18 +636,12 @@ function EdificioForm({ open, onClose, editing, onSave }: {
           <label className="text-sm font-medium">Direccion *</label>
           <Input value={form.direccion || ""} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Numero de pisos</label>
-            <Input type="number" value={form.numeroPisos || ""} onChange={(e) => setForm({ ...form, numeroPisos: e.target.value ? Number(e.target.value) : null })} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Estado</label>
-            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.estado || "ACTIVO"} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
-              <option value="ACTIVO">ACTIVO</option>
-              <option value="INACTIVO">INACTIVO</option>
-            </select>
-          </div>
+        <div>
+          <label className="text-sm font-medium">Estado</label>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={form.estado || "ACTIVO"} onChange={(e) => setForm({ ...form, estado: e.target.value })}>
+            <option value="ACTIVO">ACTIVO</option>
+            <option value="INACTIVO">INACTIVO</option>
+          </select>
         </div>
         <div>
           <label className="text-sm font-medium">Descripcion</label>
@@ -690,6 +684,7 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
   const { data: propietariosData } = useFetch(() => propietariosApi.listar());
   const { data: inquilinosData } = useFetch(() => inquilinosApi.listar());
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; numero: string } | null>(null);
   const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
@@ -771,6 +766,9 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
                 {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
             </div>
+            <Button variant="outline" onClick={() => setBulkOpen(true)}>
+              <Layers className="w-4 h-4 mr-2" />Crear en masa
+            </Button>
             <Button onClick={() => { setEditing(null); setOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" />Nuevo
             </Button>
@@ -893,6 +891,14 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
         open={open} onClose={() => { setOpen(false); setEditing(null); }}
         editing={editing} edificios={edificios} propietarios={propietarios} onSave={handleSave}
       />
+      <DepartamentoBulkForm
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        edificios={edificios}
+        propietarios={propietarios}
+        onToast={onToast}
+        onDone={() => { setBulkOpen(false); reload(); }}
+      />
       <ConfirmDialog
         open={!!confirm}
         message={`Eliminar el departamento "${confirm?.numero}"?`}
@@ -900,6 +906,120 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
         onCancel={() => setConfirm(null)}
       />
     </div>
+  );
+}
+
+function DepartamentoBulkForm({ open, onClose, edificios, propietarios, onToast, onDone }: {
+  open: boolean; onClose: () => void;
+  edificios: Edificio[]; propietarios: Propietario[];
+  onToast: (m: string, t: "ok" | "err") => void;
+  onDone: () => void;
+}) {
+  const [edificioId, setEdificioId] = useState<number | null>(null);
+  const [propietarioId, setPropietarioId] = useState<number | null>(null);
+  const [desde, setDesde] = useState<number>(101);
+  const [hasta, setHasta] = useState<number>(141);
+  const [area, setArea] = useState<number | null>(null);
+  const [alicuota, setAlicuota] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const total = hasta >= desde ? hasta - desde + 1 : 0;
+
+  const handleSubmit = async () => {
+    if (!edificioId || !propietarioId) {
+      onToast("Selecciona edificio y propietario", "err");
+      return;
+    }
+    if (total <= 0) {
+      onToast("El rango desde-hasta no es valido", "err");
+      return;
+    }
+    if (total > 500) {
+      onToast("El rango es demasiado grande (max 500)", "err");
+      return;
+    }
+    if (alicuota == null) {
+      onToast("La alicuota es obligatoria", "err");
+      return;
+    }
+    setLoading(true);
+    let ok = 0;
+    let fail = 0;
+    for (let n = desde; n <= hasta; n++) {
+      try {
+        await departamentosApi.crear(edificioId, propietarioId, {
+          numero: String(n),
+          piso: null,
+          area: area ?? null,
+          alicuota,
+          observaciones: "",
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setLoading(false);
+    if (ok > 0) {
+      onToast(`Creados ${ok} departamento${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}`, "ok");
+      onDone();
+    } else {
+      onToast(`No se creo ninguno (fallaron ${fail})`, "err");
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Crear departamentos en masa" footer={
+      <>
+        <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={loading || !edificioId || !propietarioId}>
+          {loading ? "Creando..." : `Crear ${total} departamento${total === 1 ? "" : "s"}`}
+        </Button>
+      </>
+    }>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Edificio *</label>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={edificioId || ""} onChange={(e) => setEdificioId(Number(e.target.value))}>
+              <option value="">Seleccionar...</option>
+              {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Propietario *</label>
+            <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(Number(e.target.value))}>
+              <option value="">Seleccionar...</option>
+              {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Numero desde *</label>
+            <Input type="number" value={desde} onChange={(e) => setDesde(Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Numero hasta *</label>
+            <Input type="number" value={hasta} onChange={(e) => setHasta(Number(e.target.value))} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Area (m2)</label>
+            <Input type="number" step="0.01" value={area ?? ""} onChange={(e) => setArea(e.target.value ? Number(e.target.value) : null)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Alicuota *</label>
+            <Input type="number" step="0.01" value={alicuota ?? ""} onChange={(e) => setAlicuota(e.target.value ? Number(e.target.value) : null)} />
+          </div>
+        </div>
+        <p className="text-xs text-slate-500">
+          Se crearan {total} departamento{total === 1 ? "" : "s"} con numero {desde}..{hasta} en el edificio seleccionado,
+          todos asignados al mismo propietario. Los que ya existan se omitiran.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -1114,6 +1234,7 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
   const [confirm, setConfirm] = useState<{ id: number; cedula: string } | null>(null);
   const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const edificios = edificiosData?.edificios || [];
 
@@ -1182,6 +1303,9 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <Button variant="outline" onClick={() => setBulkOpen(true)}>
+              <Users className="w-4 h-4 mr-2" />Crear inquilinos en masa
+            </Button>
           </div>
         }
       />
@@ -1253,7 +1377,180 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
         onConfirm={() => confirm && handleDelete(confirm.id)}
         onCancel={() => setConfirm(null)}
       />
+      <InquilinoBulkForm
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        propietarios={data || []}
+        onToast={onToast}
+        onDone={() => { setBulkOpen(false); reload(); }}
+      />
     </div>
+  );
+}
+
+function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
+  open: boolean; onClose: () => void;
+  propietarios: Propietario[];
+  onToast: (m: string, t: "ok" | "err") => void;
+  onDone: () => void;
+}) {
+  const [propietarioId, setPropietarioId] = useState<number | null>(null);
+  const [deptos, setDeptos] = useState<Departamento[]>([]);
+  const [deptosConInquilino, setDeptosConInquilino] = useState<Set<number>>(new Set());
+  const [nombreBase, setNombreBase] = useState("Inquilino");
+  const [cedulaInicial, setCedulaInicial] = useState<number>(1000000001);
+  const [telefono, setTelefono] = useState("");
+  const [correo, setCorreo] = useState("");
+  const [fechaIngreso, setFechaIngreso] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setPropietarioId(null);
+      setDeptos([]);
+      setDeptosConInquilino(new Set());
+      setNombreBase("Inquilino");
+      setCedulaInicial(1000000001);
+      setTelefono("");
+      setCorreo("");
+      setFechaIngreso("");
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !propietarioId) {
+      setDeptos([]);
+      setDeptosConInquilino(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await departamentosApi.listarPorPropietario(propietarioId);
+        const list = resp?.departamentos || [];
+        if (cancelled) return;
+        setDeptos(list);
+        const iguales = await inquilinosApi.listar();
+        if (cancelled) return;
+        const ocupados = new Set<number>();
+        (iguales || []).forEach((i) => {
+          if (i.departamento?.id != null) ocupados.add(i.departamento.id);
+        });
+        setDeptosConInquilino(ocupados);
+      } catch {
+        if (!cancelled) {
+          setDeptos([]);
+          setDeptosConInquilino(new Set());
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, propietarioId]);
+
+  const disponibles = deptos.filter((d) => !deptosConInquilino.has(d.id));
+  const total = disponibles.length;
+
+  const handleSubmit = async () => {
+    if (!propietarioId) {
+      onToast("Selecciona un propietario", "err");
+      return;
+    }
+    if (total === 0) {
+      onToast("No hay departamentos disponibles (todos tienen inquilino)", "err");
+      return;
+    }
+    if (!nombreBase.trim()) {
+      onToast("El nombre base es obligatorio", "err");
+      return;
+    }
+    setLoading(true);
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < disponibles.length; i++) {
+      const d = disponibles[i];
+      try {
+        await inquilinosApi.crear(d.id, {
+          cedula: String(cedulaInicial + i),
+          nombre: `${nombreBase} ${d.numero}`.trim(),
+          apellido: null,
+          telefono: telefono || null,
+          correo: correo || null,
+          fechaIngreso: fechaIngreso || null,
+          fechaSalida: null,
+          estado: "ACTIVO",
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setLoading(false);
+    if (ok > 0) {
+      onToast(`Creados ${ok} inquilino${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}`, "ok");
+      onDone();
+    } else {
+      onToast(`No se creo ninguno (fallaron ${fail})`, "err");
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Crear inquilinos en masa" footer={
+      <>
+        <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={loading || !propietarioId || total === 0}>
+          {loading ? "Creando..." : `Crear ${total} inquilino${total === 1 ? "" : "s"}`}
+        </Button>
+      </>
+    }>
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm font-medium">Propietario *</label>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(Number(e.target.value))}>
+            <option value="">Seleccionar...</option>
+            {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
+          </select>
+        </div>
+
+        {propietarioId && (
+          <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+            Departamentos del propietario: <strong>{deptos.length}</strong> ·
+            Disponibles (sin inquilino): <strong>{total}</strong>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Nombre base *</label>
+            <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Inquilino" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Cedula inicial *</label>
+            <Input type="number" value={cedulaInicial} onChange={(e) => setCedulaInicial(Number(e.target.value))} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Telefono</label>
+            <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Correo</label>
+            <Input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Fecha de ingreso</label>
+          <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Se creara un inquilino por cada departamento disponible del propietario.
+          El nombre sera `{nombreBase || "Inquilino"} &lt;numero de departamento&gt;` y la cedula incrementa desde {cedulaInicial}.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
