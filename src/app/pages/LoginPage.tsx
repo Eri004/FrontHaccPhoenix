@@ -80,8 +80,8 @@ Value: https://backendhacc-production.up.railway.app`}
 
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-8 border border-slate-200 dark:border-slate-700">
             <div className="flex flex-col items-center text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mb-4 shadow-lg">
-                <Building2 className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center mb-4 shadow-lg overflow-hidden">
+                <img src="/hacc-icon.png" alt="HACC" className="w-full h-full object-cover" />
               </div>
               <h1 className="text-2xl font-bold text-slate-900 dark:text-white">HACCPHOENIX</h1>
               <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">

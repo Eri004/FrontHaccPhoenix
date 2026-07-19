@@ -94,15 +94,11 @@ export default function ResidentView({ onLogout }: ResidentViewProps) {
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
           {sidebarOpen ? (
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-                <Building2 className="w-5 h-5 text-white" />
-              </div>
+              <img src="/hacc-icon.png" alt="HACC" className="w-9 h-9 rounded-xl object-cover shrink-0" />
               <span className="font-bold text-slate-900 dark:text-white truncate">HACCPHOENIX</span>
             </div>
           ) : (
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
+            <img src="/hacc-icon.png" alt="HACC" className="w-9 h-9 rounded-xl object-cover shrink-0" />
           )}
           <div className="flex items-center gap-1">
             <button
