@@ -685,6 +685,7 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
   const { data: inquilinosData } = useFetch(() => inquilinosApi.listar());
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkExcelOpen, setBulkExcelOpen] = useState(false);
   const [editing, setEditing] = useState<Departamento | null>(null);
   const [confirm, setConfirm] = useState<{ id: number; numero: string } | null>(null);
   const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
@@ -768,6 +769,9 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
             </div>
             <Button variant="outline" onClick={() => setBulkOpen(true)}>
               <Layers className="w-4 h-4 mr-2" />Crear en masa
+            </Button>
+            <Button variant="outline" onClick={() => setBulkExcelOpen(true)}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />Importar Excel
             </Button>
             <Button onClick={() => { setEditing(null); setOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" />Nuevo
@@ -893,11 +897,19 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
       />
       <DepartamentoBulkForm
         open={bulkOpen}
-        onClose={() => setBulkOpen(false)}
+        onClose={() => { setBulkOpen(false); }}
         edificios={edificios}
         propietarios={propietarios}
         onToast={onToast}
         onDone={() => { setBulkOpen(false); reload(); }}
+      />
+      <DepartamentoExcelForm
+        open={bulkExcelOpen}
+        onClose={() => { setBulkExcelOpen(false); }}
+        edificios={edificios}
+        propietarios={propietarios}
+        onToast={onToast}
+        onDone={() => { setBulkExcelOpen(false); reload(); }}
       />
       <ConfirmDialog
         open={!!confirm}
@@ -1017,6 +1029,173 @@ function DepartamentoBulkForm({ open, onClose, edificios, propietarios, onToast,
         <p className="text-xs text-slate-500">
           Se crearan {total} departamento{total === 1 ? "" : "s"} con numero {desde}..{hasta} en el edificio seleccionado,
           todos asignados al mismo propietario. Los que ya existan se omitiran.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+function DepartamentoExcelForm({ open, onClose, edificios, propietarios, onToast, onDone }: {
+  open: boolean; onClose: () => void;
+  edificios: Edificio[]; propietarios: Propietario[];
+  onToast: (m: string, t: "ok" | "err") => void;
+  onDone: () => void;
+}) {
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [filas, setFilas] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setArchivo(null);
+      setFilas(null);
+      setLoading(false);
+    }
+  }, [open]);
+
+  const handleDownloadPlantilla = () => {
+    import("xlsx").then((XLSX) => {
+      const wsData = [
+        ["edificioNombre", "numero", "propietarioCedula", "piso", "area", "alicuota", "observaciones"],
+        ["Edificio Principal", "101", "0901234567", "1", "65.50", "0.05", "Depto esquina"],
+        ["Edificio Principal", "102", "0901234567", "1", "68.00", "0.05", ""],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws["!cols"] = [{ wch: 22 }, { wch: 10 }, { wch: 18 }, { wch: 6 }, { wch: 8 }, { wch: 10 }, { wch: 24 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Departamentos");
+      XLSX.writeFile(wb, "plantilla_departamentos.xlsx");
+    }).catch(() => onToast("No se pudo generar la plantilla", "err"));
+  };
+
+  const handleArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setArchivo(f);
+    setFilas(null);
+    import("xlsx").then((XLSX) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+          setFilas(rows);
+        } catch {
+          onToast("No se pudo leer el archivo Excel", "err");
+          setFilas(null);
+        }
+      };
+      reader.readAsArrayBuffer(f);
+    }).catch(() => onToast("Libreria xlsx no disponible", "err"));
+  };
+
+  const handleSubmit = async () => {
+    if (!filas || filas.length === 0) {
+      onToast("El archivo no tiene filas validas", "err");
+      return;
+    }
+    const edifPorNombre = new Map<string, Edificio>();
+    edificios.forEach((e) => edifPorNombre.set((e.nombre || "").trim().toLowerCase(), e));
+    const propPorCedula = new Map<string, Propietario>();
+    propietarios.forEach((p) => propPorCedula.set((p.cedula || "").trim(), p));
+
+    let ok = 0;
+    let fail = 0;
+    const errores: string[] = [];
+    setLoading(true);
+    for (const r of filas) {
+      const edifNombre = String(r.edificioNombre ?? r["Edificio"] ?? "").trim();
+      const numero = String(r.numero ?? r["Numero"] ?? "").trim();
+      const cedula = String(r.propietarioCedula ?? r["Cedula"] ?? "").trim();
+      const piso = r.piso != null && r.piso !== "" ? Number(r.piso) : null;
+      const area = r.area != null && r.area !== "" ? Number(r.area) : null;
+      const alicuota = r.alicuota != null && r.alicuota !== "" ? Number(r.alicuota) : null;
+      const obs = (r.observaciones ?? r["Observaciones"] ?? "").toString().trim() || null;
+
+      const edif = edifPorNombre.get(edifNombre.toLowerCase());
+      const prop = propPorCedula.get(cedula);
+
+      if (!edif) { errores.push(`Edificio "${edifNombre}" no encontrado`); fail++; continue; }
+      if (!prop) { errores.push(`Propietario cedula "${cedula}" no encontrado`); fail++; continue; }
+      if (!numero) { errores.push(`Fila sin numero de departamento`); fail++; continue; }
+      if (alicuota == null) { errores.push(`Fila ${numero}: alicuota obligatoria`); fail++; continue; }
+
+      try {
+        await departamentosApi.crear(edif.id, prop.id, {
+          numero, piso, area, alicuota, observaciones: obs,
+        });
+        ok++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        errores.push(`Depto ${numero}: ${msg}`);
+        fail++;
+      }
+    }
+    setLoading(false);
+    if (ok > 0) {
+      const msg = `Creados ${ok} departamento${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}${errores.length ? ` - ${errores.slice(0, 3).join("; ")}${errores.length > 3 ? "..." : ""}` : ""}`;
+      onToast(msg, "ok");
+      onDone();
+    } else {
+      onToast(`No se creo ninguno. ${errores.slice(0, 3).join("; ")}${errores.length > 3 ? "..." : ""}`, "err");
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} size="lg" title="Importar departamentos desde Excel" footer={
+      <>
+        <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={loading || !filas || filas.length === 0}>
+          {loading ? "Creando..." : `Crear ${filas?.length || 0} departamento${(filas?.length || 0) === 1 ? "" : "s"}`}
+        </Button>
+      </>
+    }>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <div className="text-sm">
+            <FileSpreadsheet className="w-5 h-5 inline mr-1 text-emerald-600" />
+            Plantilla Excel con el formato esperado
+          </div>
+          <Button variant="outline" onClick={handleDownloadPlantilla}>
+            <Download className="w-4 h-4 mr-2" />Descargar plantilla
+          </Button>
+        </div>
+        <div>
+          <label className="text-sm font-medium">Archivo Excel (.xlsx) *</label>
+          <Input
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={handleArchivo}
+            className="cursor-pointer"
+          />
+        </div>
+        {archivo && filas && (
+          <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+            <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <CheckCircle2 className="w-4 h-4 inline mr-1 text-emerald-600" />
+              {filas.length} fila{filas.length === 1 ? "" : "s"} detectada{filas.length === 1 ? "" : "s"}
+            </p>
+            <div className="max-h-40 overflow-y-auto mt-1">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-slate-400">{Object.keys(filas[0] || {}).slice(0, 7).map((h) => <th key={h} className="text-left pr-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {filas.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                      {Object.values(r).slice(0, 7).map((v, j) => <td key={j} className="pr-2 py-0.5">{String(v)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filas.length > 5 && <p className="text-slate-400 mt-1">...y {filas.length - 5} mas</p>}
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-slate-500">
+          Formato: columnas <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">edificioNombre, numero, propietarioCedula, piso, area, alicuota, observaciones</code>.
+          El <strong>edificioNombre</strong> debe coincidir exactamente con un edificio existente, y <strong>propietarioCedula</strong> con un propietario registrado.
+          Los que ya existan se omitiran.
         </p>
       </div>
     </Modal>
@@ -1235,6 +1414,7 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
   const [edificioFilter, setEdificioFilter] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkExcelOpen, setBulkExcelOpen] = useState(false);
 
   const edificios = edificiosData?.edificios || [];
 
@@ -1304,7 +1484,10 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
               />
             </div>
             <Button variant="outline" onClick={() => setBulkOpen(true)}>
-              <Users className="w-4 h-4 mr-2" />Crear inquilinos en masa
+              <Users className="w-4 h-4 mr-2" />Crear inquilino
+            </Button>
+            <Button variant="outline" onClick={() => setBulkExcelOpen(true)}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" />Importar Excel
             </Button>
           </div>
         }
@@ -1384,6 +1567,12 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
         onToast={onToast}
         onDone={() => { setBulkOpen(false); reload(); }}
       />
+      <InquilinoExcelForm
+        open={bulkExcelOpen}
+        onClose={() => setBulkExcelOpen(false)}
+        onToast={onToast}
+        onDone={() => { setBulkExcelOpen(false); reload(); }}
+      />
     </div>
   );
 }
@@ -1403,9 +1592,6 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
   const [correo, setCorreo] = useState("");
   const [fechaIngreso, setFechaIngreso] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [modo, setModo] = useState<"manual" | "excel">("manual");
-  const [archivo, setArchivo] = useState<File | null>(null);
-  const [filas, setFilas] = useState<any[] | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -1417,9 +1603,6 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
       setTelefono("");
       setCorreo("");
       setFechaIngreso("");
-      setModo("manual");
-      setArchivo(null);
-      setFilas(null);
     }
   }, [open]);
 
@@ -1499,15 +1682,117 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
     }
   };
 
+  return (
+    <Modal open={open} onClose={onClose} title="Crear inquilino en masa" footer={
+      <>
+        <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={loading || !propietarioId || total === 0}>
+          {loading ? "Creando..." : `Crear ${total} inquilino${total === 1 ? "" : "s"}`}
+        </Button>
+      </>
+    }>
+      <div className="space-y-3">
+        {propietarios.length === 0 && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-700 dark:text-amber-300">
+            No hay propietarios registrados. Crea al menos un propietario primero.
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm font-medium">Propietario *</label>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(e.target.value ? Number(e.target.value) : null)} disabled={propietarios.length === 0}>
+            <option value="">Seleccionar...</option>
+            {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
+          </select>
+        </div>
+
+        {propietarioId && (
+          <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+            Departamentos del propietario: <strong>{deptos.length}</strong> ·
+            Disponibles (sin inquilino): <strong>{total}</strong>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Nombre base *</label>
+            <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Inquilino" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Cedula inicial *</label>
+            <Input type="number" value={cedulaInicial} onChange={(e) => setCedulaInicial(Number(e.target.value))} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Telefono</label>
+            <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Correo</label>
+            <Input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Fecha de ingreso</label>
+          <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Se creara un inquilino por cada departamento disponible del propietario.
+          El nombre sera `{nombreBase || "Inquilino"} &lt;numero de departamento&gt;` y la cedula incrementa desde {cedulaInicial}.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+function InquilinoExcelForm({ open, onClose, onToast, onDone }: {
+  open: boolean; onClose: () => void;
+  onToast: (m: string, t: "ok" | "err") => void;
+  onDone: () => void;
+}) {
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [filas, setFilas] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [edificios, setEdificios] = useState<Edificio[]>([]);
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  const [inquilinos, setInquilinos] = useState<Inquilino[]>([]);
+
+  useEffect(() => {
+    if (!open) {
+      setArchivo(null);
+      setFilas(null);
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      try {
+        const [edifResp, deptos, inqs] = await Promise.all([
+          edificiosApi.listar(),
+          departamentosApi.listar(),
+          inquilinosApi.listar(),
+        ]);
+        setEdificios(edifResp?.edificios || []);
+        setDepartamentos(deptos || []);
+        setInquilinos(inqs || []);
+      } catch {
+        onToast("No se pudieron cargar los datos previos", "err");
+      }
+    })();
+  }, [open]);
+
   const handleDownloadPlantilla = () => {
     import("xlsx").then((XLSX) => {
       const wsData = [
-        ["departamentoNumero", "cedula", "nombre", "apellido", "telefono", "correo", "fechaIngreso"],
-        ["101", "0901234567", "Juan", "Perez", "0987654321", "juan@example.com", "2026-01-01"],
-        ["102", "0902345678", "Maria", "Lopez", "0991234567", "maria@example.com", "2026-01-15"],
+        ["edificioNombre", "departamentoNumero", "cedula", "nombre", "apellido", "telefono", "correo", "fechaIngreso"],
+        ["Edificio Principal", "101", "0901234567", "Juan", "Perez", "0987654321", "juan@example.com", "2026-01-01"],
+        ["Edificio Principal", "102", "0902345678", "Maria", "Lopez", "0991234567", "maria@example.com", "2026-01-15"],
       ];
       const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 14 }];
+      ws["!cols"] = [{ wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 14 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Inquilinos");
       XLSX.writeFile(wb, "plantilla_inquilinos.xlsx");
@@ -1537,186 +1822,126 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
     }).catch(() => onToast("Libreria xlsx no disponible", "err"));
   };
 
-  const handleExcelSubmit = async () => {
-    if (!propietarioId) {
-      onToast("Selecciona un propietario", "err");
-      return;
-    }
+  const handleSubmit = async () => {
     if (!filas || filas.length === 0) {
       onToast("El archivo no tiene filas validas", "err");
       return;
     }
-    const porNumero = new Map<number, Departamento>();
-    deptos.forEach((d) => {
-      if (d.numero && !isNaN(Number(d.numero))) porNumero.set(Number(d.numero), d);
+    const edifPorNombre = new Map<string, Edificio>();
+    edificios.forEach((e) => edifPorNombre.set((e.nombre || "").trim().toLowerCase(), e));
+    const deptoPorClave = new Map<string, Departamento>();
+    departamentos.forEach((d) => {
+      const clave = `${(d.edificio?.nombre || "").trim().toLowerCase()}|${(d.numero || "").trim()}`;
+      deptoPorClave.set(clave, d);
     });
+    const ocupados = new Set<number>();
+    inquilinos.forEach((i) => {
+      if (i.departamento?.id != null) ocupados.add(i.departamento.id);
+    });
+
     let ok = 0;
     let fail = 0;
-    const noMatch: string[] = [];
+    const errores: string[] = [];
     setLoading(true);
     for (const r of filas) {
-      const num = r.departamentoNumero ?? r["Departamento"] ?? r["departamento"];
+      const edifNombre = String(r.edificioNombre ?? r["Edificio"] ?? "").trim();
+      const deptoNum = String(r.departamentoNumero ?? r["Departamento"] ?? r["numero"] ?? "").trim();
       const cedula = String(r.cedula ?? r["Cedula"] ?? "").trim();
       const nombre = String(r.nombre ?? r["Nombre"] ?? "").trim();
       const apellido = (r.apellido ?? r["Apellido"] ?? "").toString().trim() || null;
       const tel = (r.telefono ?? r["Telefono"] ?? "").toString().trim() || null;
       const correo = (r.correo ?? r["Correo"] ?? "").toString().trim() || null;
       const fecha = (r.fechaIngreso ?? r["FechaIngreso"] ?? "").toString().trim() || null;
-      const numKey = Number(num);
-      const d = porNumero.get(numKey);
-      if (!d) { noMatch.push(String(num)); fail++; continue; }
-      if (!cedula || !nombre) { fail++; continue; }
-      if (deptosConInquilino.has(d.id)) { fail++; continue; }
+
+      const clave = `${edifNombre.toLowerCase()}|${deptoNum}`;
+      const d = deptoPorClave.get(clave);
+
+      if (!edifNombre || !deptoNum) { errores.push(`Fila sin edificio o departamento`); fail++; continue; }
+      if (!d) { errores.push(`Depto "${edifNombre}-${deptoNum}" no encontrado`); fail++; continue; }
+      if (ocupados.has(d.id)) { errores.push(`Depto "${edifNombre}-${deptoNum}" ya tiene inquilino`); fail++; continue; }
+      if (!cedula || !nombre) { errores.push(`Fila ${edifNombre}-${deptoNum}: cedula y nombre obligatorios`); fail++; continue; }
+
       try {
         await inquilinosApi.crear(d.id, {
           cedula, nombre, apellido, telefono: tel, correo,
           fechaIngreso: fecha, fechaSalida: null, estado: "ACTIVO",
         });
         ok++;
-      } catch {
+        ocupados.add(d.id);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Error";
+        errores.push(`Depto ${deptoNum}: ${msg}`);
         fail++;
       }
     }
     setLoading(false);
     if (ok > 0) {
-      const msg = `Creados ${ok} inquilino${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}${noMatch.length ? ` - deptos no encontrados: ${noMatch.slice(0, 5).join(", ")}${noMatch.length > 5 ? "..." : ""}` : ""}`;
+      const msg = `Creados ${ok} inquilino${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}${errores.length ? ` - ${errores.slice(0, 3).join("; ")}${errores.length > 3 ? "..." : ""}` : ""}`;
       onToast(msg, "ok");
       onDone();
     } else {
-      onToast(`No se creo ninguno (fallaron ${fail})${noMatch.length ? ` - deptos no encontrados: ${noMatch.slice(0, 5).join(", ")}` : ""}`, "err");
+      onToast(`No se creo ninguno. ${errores.slice(0, 3).join("; ")}${errores.length > 3 ? "..." : ""}`, "err");
     }
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Crear inquilinos en masa" footer={
+    <Modal open={open} onClose={onClose} size="lg" title="Importar inquilinos desde Excel" footer={
       <>
         <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-        {modo === "manual" ? (
-          <Button onClick={handleSubmit} disabled={loading || !propietarioId || total === 0}>
-            {loading ? "Creando..." : `Crear ${total} inquilino${total === 1 ? "" : "s"}`}
-          </Button>
-        ) : (
-          <Button onClick={handleExcelSubmit} disabled={loading || !propietarioId || !filas || filas.length === 0}>
-            {loading ? "Creando..." : `Crear ${filas?.length || 0} inquilino${(filas?.length || 0) === 1 ? "" : "s"}`}
-          </Button>
-        )}
+        <Button onClick={handleSubmit} disabled={loading || !filas || filas.length === 0}>
+          {loading ? "Creando..." : `Crear ${filas?.length || 0} inquilino${(filas?.length || 0) === 1 ? "" : "s"}`}
+        </Button>
       </>
     }>
       <div className="space-y-3">
-        {propietarios.length === 0 && (
-          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-700 dark:text-amber-300">
-            No hay propietarios registrados. Crea al menos un propietario primero.
+        <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <div className="text-sm">
+            <FileSpreadsheet className="w-5 h-5 inline mr-1 text-emerald-600" />
+            Plantilla Excel con el formato esperado
           </div>
-        )}
-
-        <div className="flex rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <button onClick={() => setModo("manual")} className={`flex-1 py-1.5 px-3 text-sm font-medium transition-colors ${modo === "manual" ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-600"}`}>
-            Datos comunes (rapido)
-          </button>
-          <button onClick={() => setModo("excel")} className={`flex-1 py-1.5 px-3 text-sm font-medium transition-colors ${modo === "excel" ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-600"}`}>
-            <FileSpreadsheet className="w-4 h-4 inline mr-1" />Importar Excel
-          </button>
+          <Button variant="outline" onClick={handleDownloadPlantilla}>
+            <Download className="w-4 h-4 mr-2" />Descargar plantilla
+          </Button>
         </div>
-
         <div>
-          <label className="text-sm font-medium">Propietario *</label>
-          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(e.target.value ? Number(e.target.value) : null)} disabled={propietarios.length === 0}>
-            <option value="">Seleccionar...</option>
-            {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
-          </select>
+          <label className="text-sm font-medium">Archivo Excel (.xlsx) *</label>
+          <Input
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={handleArchivo}
+            className="cursor-pointer"
+          />
         </div>
-
-        {propietarioId && (
+        {archivo && filas && (
           <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
-            Departamentos del propietario: <strong>{deptos.length}</strong> ·
-            Disponibles (sin inquilino): <strong>{total}</strong>
+            <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">
+              <CheckCircle2 className="w-4 h-4 inline mr-1 text-emerald-600" />
+              {filas.length} fila{filas.length === 1 ? "" : "s"} detectada{filas.length === 1 ? "" : "s"}
+            </p>
+            <div className="max-h-40 overflow-y-auto mt-1">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-slate-400">{Object.keys(filas[0] || {}).slice(0, 8).map((h) => <th key={h} className="text-left pr-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {filas.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                      {Object.values(r).slice(0, 8).map((v, j) => <td key={j} className="pr-2 py-0.5">{String(v)}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filas.length > 5 && <p className="text-slate-400 mt-1">...y {filas.length - 5} mas</p>}
+            </div>
           </div>
         )}
-
-        {modo === "manual" ? (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium">Nombre base *</label>
-                <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Inquilino" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Cedula inicial *</label>
-                <Input type="number" value={cedulaInicial} onChange={(e) => setCedulaInicial(Number(e.target.value))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium">Telefono</label>
-                <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Correo</label>
-                <Input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Fecha de ingreso</label>
-              <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
-            </div>
-            <p className="text-xs text-slate-500">
-              Se creara un inquilino por cada departamento disponible del propietario.
-              El nombre sera `{nombreBase || "Inquilino"} &lt;numero de departamento&gt;` y la cedula incrementa desde {cedulaInicial}.
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-              <div className="text-sm">
-                <FileSpreadsheet className="w-5 h-5 inline mr-1 text-emerald-600" />
-                Plantilla Excel con el formato esperado
-              </div>
-              <Button variant="outline" onClick={handleDownloadPlantilla}>
-                <Download className="w-4 h-4 mr-2" />Descargar plantilla
-              </Button>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Archivo Excel (.xlsx) *</label>
-              <Input
-                type="file"
-                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={handleArchivo}
-                className="cursor-pointer"
-              />
-            </div>
-            {archivo && filas && (
-              <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
-                <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  <CheckCircle2 className="w-4 h-4 inline mr-1 text-emerald-600" />
-                  {filas.length} fila{filas.length === 1 ? "" : "s"} detectada{filas.length === 1 ? "" : "s"}
-                </p>
-                <div className="max-h-32 overflow-y-auto mt-1">
-                  <table className="w-full text-[11px]">
-                    <thead><tr className="text-slate-400">{Object.keys(filas[0] || {}).slice(0, 6).map((h) => <th key={h} className="text-left pr-2">{h}</th>)}</tr></thead>
-                    <tbody>
-                      {filas.slice(0, 5).map((r, i) => (
-                        <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
-                          {Object.values(r).slice(0, 6).map((v, j) => <td key={j} className="pr-2 py-0.5">{String(v)}</td>)}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {filas.length > 5 && <p className="text-slate-400 mt-1">...y {filas.length - 5} mas</p>}
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-slate-500">
-              Formato: columnas <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">departamentoNumero, cedula, nombre, apellido, telefono, correo, fechaIngreso</code>.
-              El <strong>departamentoNumero</strong> debe coincidir con un departamento del propietario seleccionado.
-              Las fechas en formato AAAA-MM-DD. Los que ya tengan inquilino se omitiran.
-            </p>
-          </>
-        )}
+        <p className="text-xs text-slate-500">
+          Formato: columnas <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">edificioNombre, departamentoNumero, cedula, nombre, apellido, telefono, correo, fechaIngreso</code>.
+          El <strong>edificioNombre</strong> y <strong>departamentoNumero</strong> deben coincidir con un departamento existente.
+          Las fechas en formato AAAA-MM-DD. Los que ya tengan inquilino se omitiran.
+        </p>
       </div>
     </Modal>
   );
 }
-
 function CargosSection({ onToast }: { onToast: (m: string, t: "ok" | "err") => void }) {
   const { data, loading, error, reload } = useFetch(() => cargosApi.listar());
   const { data: departamentosData } = useFetch(() => departamentosApi.listar());
