@@ -6,7 +6,7 @@ import {
   BarChart3, Home, UserCog, IdCard, Menu, X, RefreshCw, CheckCircle2,
   AlertTriangle, Clock, Mail, Phone, MapPin, Filter, Calendar,
   ChevronRight, ArrowLeft, Layers, Hash, Square, Upload, ImageIcon,
-  Hash as HashIcon,
+  Hash as HashIcon, Users, FileSpreadsheet,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -1403,6 +1403,9 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
   const [correo, setCorreo] = useState("");
   const [fechaIngreso, setFechaIngreso] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [modo, setModo] = useState<"manual" | "excel">("manual");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [filas, setFilas] = useState<any[] | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -1414,6 +1417,9 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
       setTelefono("");
       setCorreo("");
       setFechaIngreso("");
+      setModo("manual");
+      setArchivo(null);
+      setFilas(null);
     }
   }, [open]);
 
@@ -1493,19 +1499,128 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
     }
   };
 
+  const handleDownloadPlantilla = () => {
+    import("xlsx").then((XLSX) => {
+      const wsData = [
+        ["departamentoNumero", "cedula", "nombre", "apellido", "telefono", "correo", "fechaIngreso"],
+        ["101", "0901234567", "Juan", "Perez", "0987654321", "juan@example.com", "2026-01-01"],
+        ["102", "0902345678", "Maria", "Lopez", "0991234567", "maria@example.com", "2026-01-15"],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 24 }, { wch: 14 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Inquilinos");
+      XLSX.writeFile(wb, "plantilla_inquilinos.xlsx");
+    }).catch(() => onToast("No se pudo generar la plantilla", "err"));
+  };
+
+  const handleArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setArchivo(f);
+    setFilas(null);
+    import("xlsx").then((XLSX) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const wb = XLSX.read(data, { type: "array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+          setFilas(rows);
+        } catch {
+          onToast("No se pudo leer el archivo Excel", "err");
+          setFilas(null);
+        }
+      };
+      reader.readAsArrayBuffer(f);
+    }).catch(() => onToast("Libreria xlsx no disponible", "err"));
+  };
+
+  const handleExcelSubmit = async () => {
+    if (!propietarioId) {
+      onToast("Selecciona un propietario", "err");
+      return;
+    }
+    if (!filas || filas.length === 0) {
+      onToast("El archivo no tiene filas validas", "err");
+      return;
+    }
+    const porNumero = new Map<number, Departamento>();
+    deptos.forEach((d) => {
+      if (d.numero && !isNaN(Number(d.numero))) porNumero.set(Number(d.numero), d);
+    });
+    let ok = 0;
+    let fail = 0;
+    const noMatch: string[] = [];
+    setLoading(true);
+    for (const r of filas) {
+      const num = r.departamentoNumero ?? r["Departamento"] ?? r["departamento"];
+      const cedula = String(r.cedula ?? r["Cedula"] ?? "").trim();
+      const nombre = String(r.nombre ?? r["Nombre"] ?? "").trim();
+      const apellido = (r.apellido ?? r["Apellido"] ?? "").toString().trim() || null;
+      const tel = (r.telefono ?? r["Telefono"] ?? "").toString().trim() || null;
+      const correo = (r.correo ?? r["Correo"] ?? "").toString().trim() || null;
+      const fecha = (r.fechaIngreso ?? r["FechaIngreso"] ?? "").toString().trim() || null;
+      const numKey = Number(num);
+      const d = porNumero.get(numKey);
+      if (!d) { noMatch.push(String(num)); fail++; continue; }
+      if (!cedula || !nombre) { fail++; continue; }
+      if (deptosConInquilino.has(d.id)) { fail++; continue; }
+      try {
+        await inquilinosApi.crear(d.id, {
+          cedula, nombre, apellido, telefono: tel, correo,
+          fechaIngreso: fecha, fechaSalida: null, estado: "ACTIVO",
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setLoading(false);
+    if (ok > 0) {
+      const msg = `Creados ${ok} inquilino${ok === 1 ? "" : "s"}${fail > 0 ? ` (fallaron ${fail})` : ""}${noMatch.length ? ` - deptos no encontrados: ${noMatch.slice(0, 5).join(", ")}${noMatch.length > 5 ? "..." : ""}` : ""}`;
+      onToast(msg, "ok");
+      onDone();
+    } else {
+      onToast(`No se creo ninguno (fallaron ${fail})${noMatch.length ? ` - deptos no encontrados: ${noMatch.slice(0, 5).join(", ")}` : ""}`, "err");
+    }
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title="Crear inquilinos en masa" footer={
+    <Modal open={open} onClose={onClose} size="lg" title="Crear inquilinos en masa" footer={
       <>
         <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-        <Button onClick={handleSubmit} disabled={loading || !propietarioId || total === 0}>
-          {loading ? "Creando..." : `Crear ${total} inquilino${total === 1 ? "" : "s"}`}
-        </Button>
+        {modo === "manual" ? (
+          <Button onClick={handleSubmit} disabled={loading || !propietarioId || total === 0}>
+            {loading ? "Creando..." : `Crear ${total} inquilino${total === 1 ? "" : "s"}`}
+          </Button>
+        ) : (
+          <Button onClick={handleExcelSubmit} disabled={loading || !propietarioId || !filas || filas.length === 0}>
+            {loading ? "Creando..." : `Crear ${filas?.length || 0} inquilino${(filas?.length || 0) === 1 ? "" : "s"}`}
+          </Button>
+        )}
       </>
     }>
       <div className="space-y-3">
+        {propietarios.length === 0 && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-700 dark:text-amber-300">
+            No hay propietarios registrados. Crea al menos un propietario primero.
+          </div>
+        )}
+
+        <div className="flex rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <button onClick={() => setModo("manual")} className={`flex-1 py-1.5 px-3 text-sm font-medium transition-colors ${modo === "manual" ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-600"}`}>
+            Datos comunes (rapido)
+          </button>
+          <button onClick={() => setModo("excel")} className={`flex-1 py-1.5 px-3 text-sm font-medium transition-colors ${modo === "excel" ? "bg-blue-600 text-white" : "bg-white dark:bg-slate-900 text-slate-600"}`}>
+            <FileSpreadsheet className="w-4 h-4 inline mr-1" />Importar Excel
+          </button>
+        </div>
+
         <div>
           <label className="text-sm font-medium">Propietario *</label>
-          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(Number(e.target.value))}>
+          <select className="w-full h-9 px-3 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800" value={propietarioId || ""} onChange={(e) => setPropietarioId(e.target.value ? Number(e.target.value) : null)} disabled={propietarios.length === 0}>
             <option value="">Seleccionar...</option>
             {propietarios.map((p) => <option key={p.id} value={p.id}>{p.cedula} {p.usuario ? `- ${p.usuario.nombre}` : ""}</option>)}
           </select>
@@ -1518,37 +1633,85 @@ function InquilinoBulkForm({ open, onClose, propietarios, onToast, onDone }: {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Nombre base *</label>
-            <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Inquilino" />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Cedula inicial *</label>
-            <Input type="number" value={cedulaInicial} onChange={(e) => setCedulaInicial(Number(e.target.value))} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm font-medium">Telefono</label>
-            <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Correo</label>
-            <Input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium">Fecha de ingreso</label>
-          <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
-        </div>
-
-        <p className="text-xs text-slate-500">
-          Se creara un inquilino por cada departamento disponible del propietario.
-          El nombre sera `{nombreBase || "Inquilino"} &lt;numero de departamento&gt;` y la cedula incrementa desde {cedulaInicial}.
-        </p>
+        {modo === "manual" ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Nombre base *</label>
+                <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Inquilino" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Cedula inicial *</label>
+                <Input type="number" value={cedulaInicial} onChange={(e) => setCedulaInicial(Number(e.target.value))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Telefono</label>
+                <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Correo</label>
+                <Input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Fecha de ingreso</label>
+              <Input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)} />
+            </div>
+            <p className="text-xs text-slate-500">
+              Se creara un inquilino por cada departamento disponible del propietario.
+              El nombre sera `{nombreBase || "Inquilino"} &lt;numero de departamento&gt;` y la cedula incrementa desde {cedulaInicial}.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+              <div className="text-sm">
+                <FileSpreadsheet className="w-5 h-5 inline mr-1 text-emerald-600" />
+                Plantilla Excel con el formato esperado
+              </div>
+              <Button variant="outline" onClick={handleDownloadPlantilla}>
+                <Download className="w-4 h-4 mr-2" />Descargar plantilla
+              </Button>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Archivo Excel (.xlsx) *</label>
+              <Input
+                type="file"
+                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleArchivo}
+                className="cursor-pointer"
+              />
+            </div>
+            {archivo && filas && (
+              <div className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                <p className="font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <CheckCircle2 className="w-4 h-4 inline mr-1 text-emerald-600" />
+                  {filas.length} fila{filas.length === 1 ? "" : "s"} detectada{filas.length === 1 ? "" : "s"}
+                </p>
+                <div className="max-h-32 overflow-y-auto mt-1">
+                  <table className="w-full text-[11px]">
+                    <thead><tr className="text-slate-400">{Object.keys(filas[0] || {}).slice(0, 6).map((h) => <th key={h} className="text-left pr-2">{h}</th>)}</tr></thead>
+                    <tbody>
+                      {filas.slice(0, 5).map((r, i) => (
+                        <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                          {Object.values(r).slice(0, 6).map((v, j) => <td key={j} className="pr-2 py-0.5">{String(v)}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filas.length > 5 && <p className="text-slate-400 mt-1">...y {filas.length - 5} mas</p>}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-slate-500">
+              Formato: columnas <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">departamentoNumero, cedula, nombre, apellido, telefono, correo, fechaIngreso</code>.
+              El <strong>departamentoNumero</strong> debe coincidir con un departamento del propietario seleccionado.
+              Las fechas en formato AAAA-MM-DD. Los que ya tengan inquilino se omitiran.
+            </p>
+          </>
+        )}
       </div>
     </Modal>
   );
