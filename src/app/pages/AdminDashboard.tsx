@@ -767,9 +767,6 @@ function DepartamentosSection({ onToast }: { onToast: (m: string, t: "ok" | "err
                 {edificios.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
             </div>
-            <Button variant="outline" onClick={() => setBulkOpen(true)}>
-              <Layers className="w-4 h-4 mr-2" />Crear en masa
-            </Button>
             <Button variant="outline" onClick={() => setBulkExcelOpen(true)}>
               <FileSpreadsheet className="w-4 h-4 mr-2" />Importar Excel
             </Button>
@@ -1483,9 +1480,6 @@ function PropietariosSection({ onToast }: { onToast: (m: string, t: "ok" | "err"
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Button variant="outline" onClick={() => setBulkOpen(true)}>
-              <Users className="w-4 h-4 mr-2" />Crear inquilino
-            </Button>
             <Button variant="outline" onClick={() => setBulkExcelOpen(true)}>
               <FileSpreadsheet className="w-4 h-4 mr-2" />Importar Excel
             </Button>
